@@ -24,6 +24,7 @@ import cn.nukkit.network.connection.util.HandleByteBuf;
 import cn.nukkit.network.process.DataPacketManager;
 import cn.nukkit.network.process.SessionState;
 import cn.nukkit.network.security.BotnetDetector;
+import cn.nukkit.network.security.MaliciousPacketTracker;
 import cn.nukkit.network.process.handler.HandshakePacketHandler;
 import cn.nukkit.network.process.handler.InGamePacketHandler;
 import cn.nukkit.network.process.handler.LoginHandler;
@@ -107,8 +108,12 @@ public class BedrockSession {
         this.setPacketConsumer((pk) -> {
             try {
                 this.handleDataPacket(pk);
-            } catch (Exception e) {
-                log.error("An error occurred whilst handling {} for {}", pk.getClass().getSimpleName(), this.getSocketAddress().toString(), e);
+            } catch (Throwable e) {
+                // Mirror upstream-fork behaviour: on any handler error, log + kick + short IP block
+                // so an attacker can't keep firing the offending packet to spam the server log.
+                log.error("An error occurred whilst handling {} for {}", pk.getClass().getSimpleName(), this.getSocketAddress(), e);
+                MaliciousPacketTracker.flag(this.address, pk.getClass().getSimpleName() + ": " + e.getMessage());
+                this.close("§cInternal Error");
             }
         });
 
