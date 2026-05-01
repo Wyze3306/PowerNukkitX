@@ -71,7 +71,11 @@ public class SkinUtils {
     }
 
     private static void validateImageDimensions(int width, int height, int dataLength) {
-        if (width <= 0 || height <= 0 || width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+        // Empty image (no cape, etc.) is legitimate and serialized as 0x0 with no bytes.
+        if (width == 0 && height == 0 && dataLength == 0) {
+            return;
+        }
+        if (width < 0 || height < 0 || width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
             throw new IllegalArgumentException("Invalid image dimensions: " + width + "x" + height);
         }
         long expected = (long) width * (long) height * 4L;
