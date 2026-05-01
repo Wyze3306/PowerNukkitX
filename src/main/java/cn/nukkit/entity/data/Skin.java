@@ -53,6 +53,11 @@ public class Skin {
     public static final int DOUBLE_SKIN_SIZE = 64 * 64 * PIXEL_SIZE;
     public static final int SKIN_128_64_SIZE = 128 * 64 * PIXEL_SIZE;
     public static final int SKIN_128_128_SIZE = 128 * 128 * PIXEL_SIZE;
+    /** Hard upper bound on declared image dimensions; matches {@link cn.nukkit.utils.SkinUtils#MAX_IMAGE_DIMENSION}. */
+    public static final int MAX_IMAGE_DIMENSION = 1024;
+    public static final int MAX_SKIN_BYTES = MAX_IMAGE_DIMENSION * MAX_IMAGE_DIMENSION * PIXEL_SIZE;
+    /** Cap on geometry JSON body. Bedrock vanilla geometries are well under this; anything bigger is suspicious. */
+    public static final int MAX_GEOMETRY_LENGTH = 1024 * 1024;
     private final List<SkinAnimation> animations = new ArrayList<>();
     private final List<PersonaPiece> personaPieces = new ArrayList<>();
     private final List<PersonaPieceTint> tintColors = new ArrayList<>();
@@ -102,7 +107,16 @@ public class Skin {
     private boolean isValidSkin() {
         return skinId != null && !skinId.trim().isEmpty() && skinId.length() < 100 &&
                 skinData != null && skinData.width >= 32 && skinData.height >= 32 &&
+                skinData.width <= MAX_IMAGE_DIMENSION && skinData.height <= MAX_IMAGE_DIMENSION &&
                 skinData.data.length >= SINGLE_SKIN_SIZE &&
+                skinData.data.length <= MAX_SKIN_BYTES &&
+                skinData.data.length == (long) skinData.width * skinData.height * PIXEL_SIZE &&
+                (capeData == null ||
+                        (capeData.width <= MAX_IMAGE_DIMENSION && capeData.height <= MAX_IMAGE_DIMENSION &&
+                                capeData.data.length <= MAX_SKIN_BYTES &&
+                                (capeData.data.length == 0 ||
+                                        capeData.data.length == (long) capeData.width * capeData.height * PIXEL_SIZE))) &&
+                (geometryData == null || geometryData.length() <= MAX_GEOMETRY_LENGTH) &&
                 (playFabId == null || playFabId.length() < 100) &&
                 (capeId == null || capeId.length() < 100) &&
                 (skinColor == null || skinColor.length() < 100) &&
