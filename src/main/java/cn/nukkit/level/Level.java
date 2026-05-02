@@ -15,6 +15,7 @@ import cn.nukkit.entity.Entity;
 import cn.nukkit.entity.EntityAsyncPrepare;
 import cn.nukkit.entity.EntityID;
 import cn.nukkit.entity.EntityIntelligent;
+import cn.nukkit.entity.EntityIntelligentHuman;
 import cn.nukkit.entity.EntityQueryOptions;
 import cn.nukkit.entity.item.EntityAreaEffectCloud;
 import cn.nukkit.entity.item.EntityFireworksRocket;
@@ -4091,6 +4092,11 @@ public class Level implements Metadatable {
         if (entity instanceof Player p) {
             this.players.put(entity.getId(), p);
             this.playerWeatherShowMap.put(p.getName(), 0);
+        } else if (this.server.areMobsDisabled()
+                && entity instanceof EntityIntelligent
+                && !(entity instanceof EntityIntelligentHuman)) {
+            entity.close();
+            return;
         }
         this.entities.put(entity.getId(), entity);
     }
