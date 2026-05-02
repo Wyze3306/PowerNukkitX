@@ -521,6 +521,7 @@ public class Chunk implements IChunk {
 
     @Override
     public void doMobSpawning() {
+        if (Server.getInstance().areMobsDisabled()) return;
         Level level = getProvider().getLevel();
         if (!isLoaded() || !isGenerated() || !isLightPopulated()) return;
         if (Utils.rand(0, 50) != 0) return;

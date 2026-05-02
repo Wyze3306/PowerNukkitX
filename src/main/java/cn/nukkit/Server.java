@@ -278,6 +278,7 @@ public class Server {
     private Level defaultLevel = null;
     private boolean allowNether;
     private boolean allowTheEnd;
+    private boolean disableMobs;
     private List<ExperimentEntry> experiments;
 
     private final BedrockMigrationService migrationService = new BedrockMigrationService(this);
@@ -397,6 +398,7 @@ public class Server {
 
         this.allowNether = this.settings.gameplaySettings().allowNether();
         this.allowTheEnd = this.settings.gameplaySettings().allowTheEnd();
+        this.disableMobs = this.settings.gameplaySettings().disableMobs();
         this.useTerra = this.settings.miscSettings().enableTerra();
         this.checkLoginTime = this.settings.networkSettings().checkLoginTime();
 
@@ -2906,6 +2908,10 @@ public class Server {
 
     public boolean isTheEndAllowed() {
         return this.allowTheEnd;
+    }
+
+    public boolean areMobsDisabled() {
+        return this.disableMobs;
     }
 
     private boolean isDimensionAllowed(int dimensionId) {

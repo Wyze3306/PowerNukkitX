@@ -1,6 +1,7 @@
 package cn.nukkit.entity;
 
 import cn.nukkit.Player;
+import cn.nukkit.Server;
 import cn.nukkit.entity.ai.EntityAI;
 import cn.nukkit.entity.ai.behaviorgroup.EmptyBehaviorGroup;
 import cn.nukkit.entity.ai.behaviorgroup.IBehaviorGroup;
@@ -85,6 +86,10 @@ public abstract class EntityIntelligent extends EntityPhysical implements Logica
         if (!isAlive()) return;
         // Calculate whether it is active
         isActive = level.isHighLightChunk(getChunkX(), getChunkZ());
+        if (Server.getInstance().areMobsDisabled()) {
+            super.asyncPrepare(currentTick);
+            return;
+        }
         if (!this.isImmobile()) { // immobile will disable physical AI.
             var behaviorGroup = getBehaviorGroup();
             if (behaviorGroup == null) return;

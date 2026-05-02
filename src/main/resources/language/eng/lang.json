@@ -106,6 +106,7 @@
   "pnx.settings.gameplay.difficulty": "Game difficulty",
   "pnx.settings.gameplay.allowNether": "Whether to allow the Nether",
   "pnx.settings.gameplay.allowEnd": "Whether to allow the End",
+  "pnx.settings.gameplay.disableMobs": "If true, completely disable mob natural spawning (chunks, mob spawners) and AI ticking",
   "pnx.settings.gameplay.forceResources": "Whether to force resources",
   "pnx.settings.gameplay.allowClientPacks": "Whether to allow client packs",
   "pnx.settings.gameplay.serverAuthoritativeMovement": "Whether to enable server authoritative movement",

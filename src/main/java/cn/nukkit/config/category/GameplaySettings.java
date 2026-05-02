@@ -43,6 +43,8 @@ public class GameplaySettings extends OkaeriConfig {
     boolean allowNether = true;
     @Comment("pnx.settings.gameplay.allowEnd")
     boolean allowTheEnd = true;
+    @Comment("pnx.settings.gameplay.disableMobs")
+    boolean disableMobs = false;
     @Comment("pnx.settings.gameplay.forceResources")
     boolean forceResources = false;
     @Comment("pnx.settings.gameplay.allowClientPacks")

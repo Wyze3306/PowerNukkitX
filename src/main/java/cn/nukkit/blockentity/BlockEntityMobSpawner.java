@@ -1,6 +1,7 @@
 package cn.nukkit.blockentity;
 
 import cn.nukkit.Player;
+import cn.nukkit.Server;
 import cn.nukkit.block.Block;
 import cn.nukkit.block.BlockFlowable;
 import cn.nukkit.block.BlockID;
@@ -114,6 +115,7 @@ public class BlockEntityMobSpawner extends BlockEntitySpawnable {
         }
 
         if(!getLevel().getGameRules().getBoolean(GameRule.DO_MOB_SPAWNING)) return true;
+        if(Server.getInstance().areMobsDisabled()) return true;
 
         if (this.delay++ >= Utils.rand(this.minSpawnDelay, this.maxSpawnDelay)) {
             this.delay = 0;
