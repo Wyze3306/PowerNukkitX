@@ -737,12 +737,16 @@ public class Server {
                 generatorConfig.put(0,
                         new LevelConfig.GeneratorConfig("normal", seed, false, LevelConfig.AntiXrayMode.LOW, true,
                                 DimensionEnum.OVERWORLD.getDimensionData(), Collections.emptyMap()));
-                generatorConfig.put(1,
-                        new LevelConfig.GeneratorConfig("nether", seed, false, LevelConfig.AntiXrayMode.LOW, true,
-                                DimensionEnum.NETHER.getDimensionData(), Collections.emptyMap()));
-                generatorConfig.put(2,
-                        new LevelConfig.GeneratorConfig("the_end", seed, false, LevelConfig.AntiXrayMode.LOW, true,
-                                DimensionEnum.THE_END.getDimensionData(), Collections.emptyMap()));
+                if (this.allowNether) {
+                    generatorConfig.put(1,
+                            new LevelConfig.GeneratorConfig("nether", seed, false, LevelConfig.AntiXrayMode.LOW, true,
+                                    DimensionEnum.NETHER.getDimensionData(), Collections.emptyMap()));
+                }
+                if (this.allowTheEnd) {
+                    generatorConfig.put(2,
+                            new LevelConfig.GeneratorConfig("the_end", seed, false, LevelConfig.AntiXrayMode.LOW, true,
+                                    DimensionEnum.THE_END.getDimensionData(), Collections.emptyMap()));
+                }
                 LevelConfig levelConfig = new LevelConfig("leveldb", true, generatorConfig);
                 this.generateLevel(levelFolder, levelConfig);
             }
@@ -2385,10 +2389,14 @@ public class Server {
 
             map.put(0, new LevelConfig.GeneratorConfig("normal", seed, false, LevelConfig.AntiXrayMode.LOW, true,
                     DimensionEnum.OVERWORLD.getDimensionData(), Collections.emptyMap()));
-            map.put(1, new LevelConfig.GeneratorConfig("nether", seed, false, LevelConfig.AntiXrayMode.LOW, true,
-                    DimensionEnum.NETHER.getDimensionData(), Collections.emptyMap()));
-            map.put(2, new LevelConfig.GeneratorConfig("the_end", seed, false, LevelConfig.AntiXrayMode.LOW, true,
-                    DimensionEnum.THE_END.getDimensionData(), Collections.emptyMap()));
+            if (this.allowNether) {
+                map.put(1, new LevelConfig.GeneratorConfig("nether", seed, false, LevelConfig.AntiXrayMode.LOW, true,
+                        DimensionEnum.NETHER.getDimensionData(), Collections.emptyMap()));
+            }
+            if (this.allowTheEnd) {
+                map.put(2, new LevelConfig.GeneratorConfig("the_end", seed, false, LevelConfig.AntiXrayMode.LOW, true,
+                        DimensionEnum.THE_END.getDimensionData(), Collections.emptyMap()));
+            }
             levelConfig = new LevelConfig(LevelProviderManager.getProviderName(provider), true, map);
             try {
                 config.createNewFile();
@@ -2426,6 +2434,9 @@ public class Server {
 
         Map<Integer, LevelConfig.GeneratorConfig> generators = levelConfig.generators();
         for (var entry : generators.entrySet()) {
+            if (!isDimensionAllowed(entry.getValue().dimensionData().getDimensionId())) {
+                continue;
+            }
             String levelName = levelFolderName
                     + (generators.size() > 1 ? entry.getValue().dimensionData().getSuffix() : "");
             if (this.isLevelLoaded(levelName)) {
@@ -2501,6 +2512,9 @@ public class Server {
         }
         for (var entry : levelConfig.generators().entrySet()) {
             LevelConfig.GeneratorConfig generatorConfig = entry.getValue();
+            if (!isDimensionAllowed(generatorConfig.dimensionData().getDimensionId())) {
+                continue;
+            }
             var provider = LevelProviderManager.getProviderByName(levelConfig.format());
             Level level;
             try {
@@ -2892,6 +2906,12 @@ public class Server {
 
     public boolean isTheEndAllowed() {
         return this.allowTheEnd;
+    }
+
+    private boolean isDimensionAllowed(int dimensionId) {
+        if (dimensionId == Level.DIMENSION_NETHER) return this.allowNether;
+        if (dimensionId == Level.DIMENSION_THE_END) return this.allowTheEnd;
+        return true;
     }
 
     public boolean canLogPacket(Class<? extends DataPacket> clazz) {
