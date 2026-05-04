@@ -3877,6 +3877,7 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
 
     public void addExperience(int add, boolean playLevelUpSound) {
         if (add == 0) return;
+        if (this.server.isXpDisabled()) return;
         int now = this.getExperience();
         int added = now + add;
         int level = this.getExperienceLevel();

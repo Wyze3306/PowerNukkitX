@@ -86,8 +86,8 @@ public abstract class BlockCropsStem extends BlockCrops implements Faceable {
             return 0;
         }
         
-        if (ThreadLocalRandom.current().nextInt(1, 3) != 1 
-                || getLevel().getFullLight(this) < MINIMUM_LIGHT_LEVEL) {
+        if (ThreadLocalRandom.current().nextInt(1, 3) != 1
+                || (!Server.getInstance().isCropLightRequirementDisabled() && getLevel().getFullLight(this) < MINIMUM_LIGHT_LEVEL)) {
             return Level.BLOCK_UPDATE_RANDOM;
         }
         

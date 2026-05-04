@@ -45,6 +45,16 @@ public class GameplaySettings extends OkaeriConfig {
     boolean allowTheEnd = true;
     @Comment("pnx.settings.gameplay.disableMobs")
     boolean disableMobs = false;
+    @Comment("pnx.settings.gameplay.disableXp")
+    boolean disableXp = false;
+    @Comment("pnx.settings.gameplay.disableDayNightCycle")
+    boolean disableDayNightCycle = false;
+    @Comment("pnx.settings.gameplay.disableWeatherCycle")
+    boolean disableWeatherCycle = false;
+    @Comment("pnx.settings.gameplay.disableCropLightRequirement")
+    boolean disableCropLightRequirement = false;
+    @Comment("pnx.settings.gameplay.alwaysWetFarmland")
+    boolean alwaysWetFarmland = false;
     @Comment("pnx.settings.gameplay.forceResources")
     boolean forceResources = false;
     @Comment("pnx.settings.gameplay.allowClientPacks")

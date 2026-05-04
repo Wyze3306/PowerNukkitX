@@ -97,7 +97,7 @@ public class BlockTorchflowerCrop extends BlockCrops {
                 return Level.BLOCK_UPDATE_NORMAL;
             }
         } else if (type == Level.BLOCK_UPDATE_RANDOM) {
-            if (ThreadLocalRandom.current().nextInt(2) == 1 && getLevel().getFullLight(this) >= getMinimumLightLevel()) {
+            if (ThreadLocalRandom.current().nextInt(2) == 1 && (Server.getInstance().isCropLightRequirementDisabled() || getLevel().getFullLight(this) >= getMinimumLightLevel())) {
                 int growth = getGrowth();
                 if (growth == 1) {
                     BlockTorchflower block = new BlockTorchflower();

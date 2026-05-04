@@ -1079,6 +1079,7 @@ public class Level implements Metadatable {
     }
 
     public void checkTime() {
+        if (this.server.isDayNightCycleDisabled()) return;
         if (!this.stopTime && this.gameRules.getBoolean(GameRule.DO_DAYLIGHT_CYCLE)) {
             float prior = this.time;
             this.time += tickRate;
@@ -1330,22 +1331,25 @@ public class Level implements Metadatable {
             }
             // Tick Weather
             if (this.getDimension() == DIMENSION_OVERWORLD) {
-                if (getDayTime() == tickRate) {
-                    setRaining(false);
-                    setThundering(false);
-                }
-
-                this.rainTime--;
-                if (this.rainTime <= 0) {
-                    if (!this.setRaining(!this.raining)) {//if raining,set false
-                        setRaining(!raining);// and if event cancel,revert raining change
+                boolean autoCycle = !this.server.isWeatherCycleDisabled();
+                if (autoCycle) {
+                    if (getDayTime() == tickRate) {
+                        setRaining(false);
+                        setThundering(false);
                     }
-                }
 
-                this.thunderTime--;
-                if (this.thunderTime <= 0) {
-                    if (!this.setThundering(!this.thundering)) {
-                        setThundering(!thundering);
+                    this.rainTime--;
+                    if (this.rainTime <= 0) {
+                        if (!this.setRaining(!this.raining)) {//if raining,set false
+                            setRaining(!raining);// and if event cancel,revert raining change
+                        }
+                    }
+
+                    this.thunderTime--;
+                    if (this.thunderTime <= 0) {
+                        if (!this.setThundering(!this.thundering)) {
+                            setThundering(!thundering);
+                        }
                     }
                 }
 
@@ -2944,6 +2948,7 @@ public class Level implements Metadatable {
     }
 
     public List<EntityXpOrb> dropExpOrbAndGetEntities(Vector3 source, int exp, Vector3 motion, int delay) {
+        if (this.server.isXpDisabled()) return Collections.emptyList();
         Random rand = ThreadLocalRandom.current();
         List<Integer> drops = EntityXpOrb.splitIntoOrbSizes(exp);
         List<EntityXpOrb> entities = new ArrayList<>(drops.size());

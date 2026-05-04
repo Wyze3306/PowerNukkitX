@@ -279,6 +279,11 @@ public class Server {
     private boolean allowNether;
     private boolean allowTheEnd;
     private boolean disableMobs;
+    private boolean disableXp;
+    private boolean disableDayNightCycle;
+    private boolean disableWeatherCycle;
+    private boolean disableCropLightRequirement;
+    private boolean alwaysWetFarmland;
     private List<ExperimentEntry> experiments;
 
     private final BedrockMigrationService migrationService = new BedrockMigrationService(this);
@@ -399,6 +404,11 @@ public class Server {
         this.allowNether = this.settings.gameplaySettings().allowNether();
         this.allowTheEnd = this.settings.gameplaySettings().allowTheEnd();
         this.disableMobs = this.settings.gameplaySettings().disableMobs();
+        this.disableXp = this.settings.gameplaySettings().disableXp();
+        this.disableDayNightCycle = this.settings.gameplaySettings().disableDayNightCycle();
+        this.disableWeatherCycle = this.settings.gameplaySettings().disableWeatherCycle();
+        this.disableCropLightRequirement = this.settings.gameplaySettings().disableCropLightRequirement();
+        this.alwaysWetFarmland = this.settings.gameplaySettings().alwaysWetFarmland();
         this.useTerra = this.settings.miscSettings().enableTerra();
         this.checkLoginTime = this.settings.networkSettings().checkLoginTime();
 
@@ -2912,6 +2922,26 @@ public class Server {
 
     public boolean areMobsDisabled() {
         return this.disableMobs;
+    }
+
+    public boolean isXpDisabled() {
+        return this.disableXp;
+    }
+
+    public boolean isDayNightCycleDisabled() {
+        return this.disableDayNightCycle;
+    }
+
+    public boolean isWeatherCycleDisabled() {
+        return this.disableWeatherCycle;
+    }
+
+    public boolean isCropLightRequirementDisabled() {
+        return this.disableCropLightRequirement;
+    }
+
+    public boolean isFarmlandAlwaysWet() {
+        return this.alwaysWetFarmland;
     }
 
     private boolean isDimensionAllowed(int dimensionId) {

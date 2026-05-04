@@ -1,5 +1,6 @@
 package cn.nukkit.block;
 
+import cn.nukkit.Server;
 import cn.nukkit.block.property.CommonBlockProperties;
 import cn.nukkit.event.block.FarmLandDecayEvent;
 import cn.nukkit.item.Item;
@@ -66,6 +67,13 @@ public class BlockFarmland extends BlockTransparent {
                 return type;
             }
         } else if (type == Level.BLOCK_UPDATE_RANDOM) {
+            if (Server.getInstance().isFarmlandAlwaysWet()) {
+                if (getMoistureAmount() < 7) {
+                    setMoistureAmount(7);
+                    this.level.setBlock(this, this, false, true);
+                }
+                return Level.BLOCK_UPDATE_RANDOM;
+            }
             Vector3 v = new Vector3();
             if (this.level.getBlock(v.setComponents(x, this.y + 1, z)) instanceof BlockCrops) {
                 return 0;

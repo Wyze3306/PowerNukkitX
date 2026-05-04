@@ -96,7 +96,7 @@ public abstract class BlockCrops extends BlockFlowable {
                 return Level.BLOCK_UPDATE_NORMAL;
             }
         } else if (type == Level.BLOCK_UPDATE_RANDOM) {
-            if (ThreadLocalRandom.current().nextInt(2) == 1 && getLevel().getFullLight(this) >= getMinimumLightLevel()) {
+            if (ThreadLocalRandom.current().nextInt(2) == 1 && (Server.getInstance().isCropLightRequirementDisabled() || getLevel().getFullLight(this) >= getMinimumLightLevel())) {
                 int growth = getGrowth();
                 if (growth < getMaxGrowth()) {
                     BlockCrops block = (BlockCrops) this.clone();
