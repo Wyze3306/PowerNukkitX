@@ -4587,6 +4587,7 @@ public class Level implements Metadatable {
      * Run server memory garbage collection asynchronously
      */
     public void doLevelGarbageCollection(boolean force) {
+        if (this.provider.get() == null) return;
         if(inGarbageCollectionProcess) return;
         inGarbageCollectionProcess = true;
         //gcBlockInventoryMetaData
