@@ -86,7 +86,7 @@ public abstract class EntityIntelligent extends EntityPhysical implements Logica
         if (!isAlive()) return;
         // Calculate whether it is active
         isActive = level.isHighLightChunk(getChunkX(), getChunkZ());
-        if (Server.getInstance().areMobsDisabled()) {
+        if (Server.getInstance().areMobsDisabled() || !this.getServer().getSettings().gameplaySettings().enableMobAi()) {
             super.asyncPrepare(currentTick);
             return;
         }
