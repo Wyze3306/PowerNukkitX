@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Records malicious-packet violations and short-blocks the offending IP.
@@ -22,10 +23,17 @@ public final class MaliciousPacketTracker {
     /** How long the offending IP is blocked, in milliseconds. */
     public static final int BLOCK_DURATION_MS = 10_000;
 
+    /** Minimum gap between warn logs for the same IP, to avoid log bombing under sustained attack. */
+    private static final long LOG_THROTTLE_MS = 60_000;
+
+    /** Last log timestamp per IP. Pruned lazily on each access. */
+    private static final ConcurrentHashMap<InetAddress, Long> lastLogMs = new ConcurrentHashMap<>();
+
     private MaliciousPacketTracker() {}
 
     /**
-     * Flag a session as malicious: log a warning and block its IP for {@link #BLOCK_DURATION_MS}.
+     * Flag a session as malicious: log a warning (rate-limited per IP) and block its IP
+     * for {@link #BLOCK_DURATION_MS}.
      *
      * @param address socket address of the offending session (may be null on early failures)
      * @param reason  short human-readable reason, included in the log line
@@ -36,7 +44,14 @@ public final class MaliciousPacketTracker {
             return;
         }
         InetAddress ip = address.getAddress();
-        log.warn("Blocking {} for {}ms: {}", ip.getHostAddress(), BLOCK_DURATION_MS, reason);
+        long now = System.currentTimeMillis();
+        Long previous = lastLogMs.get(ip);
+        if (previous == null || now - previous >= LOG_THROTTLE_MS) {
+            lastLogMs.put(ip, now);
+            log.warn("Blocking {} for {}ms: {}", ip.getHostAddress(), BLOCK_DURATION_MS, reason);
+            // Opportunistic prune: drop entries older than 5 min to keep the map bounded.
+            lastLogMs.entrySet().removeIf(e -> now - e.getValue() > 5 * LOG_THROTTLE_MS);
+        }
         Server server = Server.getInstance();
         if (server != null && server.getNetwork() != null) {
             server.getNetwork().blockAddress(ip, BLOCK_DURATION_MS);

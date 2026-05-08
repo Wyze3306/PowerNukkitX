@@ -37,6 +37,11 @@ public class PlayerAuthInputProcessor extends DataPacketProcessor<PlayerAuthInpu
     @Override
     public void handle(@NotNull PlayerHandle playerHandle, @NotNull PlayerAuthInputPacket pk) {
         Player player = playerHandle.player;
+        if (pk.position == null
+                || !Float.isFinite(pk.position.x) || !Float.isFinite(pk.position.y) || !Float.isFinite(pk.position.z)
+                || !Float.isFinite(pk.yaw) || !Float.isFinite(pk.headYaw) || !Float.isFinite(pk.pitch)) {
+            return;
+        }
         if (!pk.blockActionData.isEmpty()) {
             for (PlayerBlockActionData action : pk.blockActionData.values()) {
                 //hack Since version 1.19.70, the Creative Mode Sword client no longer sends PREDITIC_DESTROY_BLOCK, but still sends START_DESTROY_BLOCK, filtering out

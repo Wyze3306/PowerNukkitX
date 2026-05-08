@@ -11,7 +11,7 @@ import lombok.experimental.Accessors;
 @Accessors(fluent = true)
 public class BotnetSettings extends OkaeriConfig {
     @Comment("pnx.settings.network.botnet.enabled")
-    boolean detectionEnabled = false;
+    boolean detectionEnabled = true;
     @Comment("pnx.settings.network.botnet.suspiciousthreshold")
     int suspiciousThreshold = 300;
     @Comment("pnx.settings.network.botnet.minsuspiciousips")

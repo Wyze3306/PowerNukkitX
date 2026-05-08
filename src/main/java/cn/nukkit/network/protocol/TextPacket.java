@@ -58,6 +58,9 @@ public class TextPacket extends DataPacket {
             case 2: // MessageAndParams
                 this.message = byteBuf.readString();
                 int len = byteBuf.readUnsignedVarInt();
+                if (len < 0 || len > 64) {
+                    throw new IllegalArgumentException("TextPacket parameter count: " + len);
+                }
                 this.parameters = new String[len];
                 for (int i = 0; i < len; i++) {
                     this.parameters[i] = byteBuf.readString();

@@ -302,6 +302,10 @@ public class Network implements NetworkInterface {
      * A function of tick for network session
      */
     public void process() {
+        // Purge expired entries from blockIpMap so it doesn't grow unbounded under attack.
+        LocalDateTime now = LocalDateTime.now();
+        blockIpMap.entrySet().removeIf(e -> now.isAfter(e.getValue()));
+
         if (botnetDetector != null) {
             var bns = server.getSettings().networkSettings().botnetSettings();
             botnetDetector.tick().ifPresent(report -> {

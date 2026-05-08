@@ -879,8 +879,17 @@ public class HandleByteBuf extends ByteBuf {
         return buf.writeCharSequence(sequence, charset);
     }
 
+    /** Hard caps for client-supplied length fields. Anything above is treated as malicious. */
+    private static final int MAX_STRING_BYTES      = 2 * 1024 * 1024;  // 2 MiB — covers skin geometry JSON
+    private static final int MAX_BYTE_ARRAY_LENGTH = 10 * 1024 * 1024; // 10 MiB — matches MAX_INFLATE_LEN
+    private static final int MAX_ARRAY_LENGTH      = 65_536;           // generous; legit lists are < 1k
+
     public String readString() {
-        byte[] bytes = new byte[this.readUnsignedVarInt()];
+        int length = this.readUnsignedVarInt();
+        if (length < 0 || length > MAX_STRING_BYTES || length > buf.readableBytes()) {
+            throw new IllegalArgumentException("Invalid string length: " + length);
+        }
+        byte[] bytes = new byte[length];
         buf.readBytes(bytes);
         return new String(bytes, StandardCharsets.UTF_8);
     }
@@ -975,7 +984,11 @@ public class HandleByteBuf extends ByteBuf {
     }
 
     public byte[] readByteArray() {
-        byte[] bytes = new byte[readUnsignedVarInt()];
+        int length = readUnsignedVarInt();
+        if (length < 0 || length > MAX_BYTE_ARRAY_LENGTH || length > readableBytes()) {
+            throw new IllegalArgumentException("Invalid byte array length: " + length);
+        }
+        byte[] bytes = new byte[length];
         readBytes(bytes);
         return bytes;
     }
@@ -1183,7 +1196,11 @@ public class HandleByteBuf extends ByteBuf {
             item.setNetId(netId);
         }
 
-        byte[] bytes = new byte[readUnsignedVarInt()];
+        int slotNbtLen = readUnsignedVarInt();
+        if (slotNbtLen < 0 || slotNbtLen > MAX_BYTE_ARRAY_LENGTH || slotNbtLen > readableBytes()) {
+            throw new IllegalArgumentException("Invalid slot NBT length: " + slotNbtLen);
+        }
+        byte[] bytes = new byte[slotNbtLen];
         readBytes(bytes);
         ByteBuf buf = ByteBufAllocator.DEFAULT.ioBuffer(bytes.length);
         buf.writeBytes(bytes);
@@ -1199,12 +1216,20 @@ public class HandleByteBuf extends ByteBuf {
                 compoundTag = (CompoundTag) ls.readTag();
             }
 
-            canPlace = new String[stream.readInt()];
+            int canPlaceLen = stream.readInt();
+            if (canPlaceLen < 0 || canPlaceLen > MAX_ARRAY_LENGTH) {
+                throw new IllegalArgumentException("Invalid canPlace length: " + canPlaceLen);
+            }
+            canPlace = new String[canPlaceLen];
             for (int i = 0; i < canPlace.length; i++) {
                 canPlace[i] = stream.readUTF();
             }
 
-            canBreak = new String[stream.readInt()];
+            int canBreakLen = stream.readInt();
+            if (canBreakLen < 0 || canBreakLen > MAX_ARRAY_LENGTH) {
+                throw new IllegalArgumentException("Invalid canBreak length: " + canBreakLen);
+            }
+            canBreak = new String[canBreakLen];
             for (int i = 0; i < canBreak.length; i++) {
                 canBreak[i] = stream.readUTF();
             }
@@ -1359,7 +1384,11 @@ public class HandleByteBuf extends ByteBuf {
             item.setNetId(netId);
         }
 
-        byte[] bytes = new byte[readUnsignedVarInt()];
+        int slotNbtLen = readUnsignedVarInt();
+        if (slotNbtLen < 0 || slotNbtLen > MAX_BYTE_ARRAY_LENGTH || slotNbtLen > readableBytes()) {
+            throw new IllegalArgumentException("Invalid slot NBT length: " + slotNbtLen);
+        }
+        byte[] bytes = new byte[slotNbtLen];
         readBytes(bytes);
         ByteBuf buf = ByteBufAllocator.DEFAULT.ioBuffer(bytes.length);
         buf.writeBytes(bytes);
@@ -1378,12 +1407,20 @@ public class HandleByteBuf extends ByteBuf {
                 compoundTag = (CompoundTag) ls.readTag();
             }
 
-            canPlace = new String[stream.readInt()];
+            int canPlaceLen = stream.readInt();
+            if (canPlaceLen < 0 || canPlaceLen > MAX_ARRAY_LENGTH) {
+                throw new IllegalArgumentException("Invalid canPlace length: " + canPlaceLen);
+            }
+            canPlace = new String[canPlaceLen];
             for (int i = 0; i < canPlace.length; i++) {
                 canPlace[i] = stream.readUTF();
             }
 
-            canBreak = new String[stream.readInt()];
+            int canBreakLen = stream.readInt();
+            if (canBreakLen < 0 || canBreakLen > MAX_ARRAY_LENGTH) {
+                throw new IllegalArgumentException("Invalid canBreak length: " + canBreakLen);
+            }
+            canBreak = new String[canBreakLen];
             for (int i = 0; i < canBreak.length; i++) {
                 canBreak[i] = stream.readUTF();
             }
@@ -1786,6 +1823,9 @@ public class HandleByteBuf extends ByteBuf {
 
     public <T> void readArray(Collection<T> array, ToLongFunction<HandleByteBuf> lengthReader, Function<HandleByteBuf, T> function) {
         long length = lengthReader.applyAsLong(this);
+        if (length < 0 || length > MAX_ARRAY_LENGTH) {
+            throw new IllegalArgumentException("Invalid array length: " + length);
+        }
         for (int i = 0; i < length; i++) {
             array.add(function.apply(this));
         }

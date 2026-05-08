@@ -24,6 +24,10 @@ import java.util.UUID;
 @Slf4j
 public class ResourcePackHandler extends BedrockSessionPacketHandler {
 
+    /** Caps to prevent a malicious client from growing internal state without bound. */
+    private static final int MAX_PENDING_CHUNK_REQUESTS = 256;
+    private static final int MAX_TRACKED_PACKS          = 64;
+
     private static final class PackMeta {
         final UUID packId;
         final ResourcePack pack;
@@ -114,10 +118,18 @@ public class ResourcePackHandler extends BedrockSessionPacketHandler {
 
     @Override
     public void handle(ResourcePackChunkRequestPacket pk) {
+        if (chunkRequestQueue.size() >= MAX_PENDING_CHUNK_REQUESTS) {
+            log.warn("RP chunk request queue full for {}, dropping", session.getAddress());
+            return;
+        }
         chunkRequestQueue.add(pk);
 
         PackMeta meta = packs.get(pk.getPackId());
         if (meta == null) {
+            if (packs.size() >= MAX_TRACKED_PACKS) {
+                log.warn("Too many distinct packs requested by {}, dropping", session.getAddress());
+                return;
+            }
             var mgr = session.getServer().getResourcePackManager();
             ResourcePack p = mgr.getPackById(pk.getPackId());
             if (p == null) {

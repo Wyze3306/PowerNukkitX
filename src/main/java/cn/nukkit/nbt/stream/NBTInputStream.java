@@ -20,6 +20,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @SuppressWarnings("unchecked")
 public class NBTInputStream implements DataInput, AutoCloseable {
+    /** Hard caps for client-supplied NBT length fields. */
+    private static final int MAX_NBT_STRING_BYTES = 64 * 1024;        // 64 KiB
+    private static final int MAX_NBT_LIST_ENTRIES = 65_536;
+    private static final int MAX_NBT_BYTE_ARRAY   = 1024 * 1024;      // 1 MiB
+    private static final int MAX_NBT_INT_ARRAY    = 256 * 1024;       // 256K ints = 1 MiB
+
     private final DataInputStream stream;
     private final ByteOrder endianness;
     private final boolean network;
@@ -155,6 +161,9 @@ public class NBTInputStream implements DataInput, AutoCloseable {
     @Override
     public String readUTF() throws IOException {
         int length = network ? (int) VarInt.readUnsignedVarInt(stream) : this.readUnsignedShort();
+        if (length < 0 || length > MAX_NBT_STRING_BYTES) {
+            throw new IOException("NBT string too long: " + length);
+        }
         byte[] bytes = new byte[length];
         this.stream.readFully(bytes);
         return new String(bytes, StandardCharsets.UTF_8);
@@ -218,6 +227,9 @@ public class NBTInputStream implements DataInput, AutoCloseable {
                     return new DoubleTag(readDouble());
                 case Tag.TAG_Byte_Array:
                     arraySize = this.readInt();
+                    if (arraySize < 0 || arraySize > MAX_NBT_BYTE_ARRAY) {
+                        throw new IOException("NBT byte array too large: " + arraySize);
+                    }
                     byte[] bytes = new byte[arraySize];
                     this.readFully(bytes);
                     return new ByteArrayTag(bytes);
@@ -234,7 +246,10 @@ public class NBTInputStream implements DataInput, AutoCloseable {
                 case Tag.TAG_List:
                     int typeId = this.readUnsignedByte();
                     int listLength = this.readInt();
-                    List<Tag> list = new ArrayList<>(listLength);
+                    if (listLength < 0 || listLength > MAX_NBT_LIST_ENTRIES) {
+                        throw new IOException("NBT list too long: " + listLength);
+                    }
+                    List<Tag> list = new ArrayList<>(Math.min(listLength, 16));
 
                     for (int i = 0; i < listLength; ++i) {
                         list.add(this.deserialize(typeId, maxDepth - 1));
@@ -242,6 +257,9 @@ public class NBTInputStream implements DataInput, AutoCloseable {
                     return new ListTag<>(typeId, list);
                 case Tag.TAG_Int_Array:
                     arraySize = this.readInt();
+                    if (arraySize < 0 || arraySize > MAX_NBT_INT_ARRAY) {
+                        throw new IOException("NBT int array too large: " + arraySize);
+                    }
                     int[] ints = new int[arraySize];
 
                     for (int i = 0; i < arraySize; ++i) {

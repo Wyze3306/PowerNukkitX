@@ -53,6 +53,10 @@ public interface CompressionProvider {
 
         @Override
         public byte[] decompress(byte[] compressed) throws IOException {
+            int uncompressedLen = Snappy.uncompressedLength(compressed);
+            if (uncompressedLen < 0 || uncompressedLen > MAX_INFLATE_LEN) {
+                throw new IOException("Snappy decompressed size too large: " + uncompressedLen);
+            }
             return Snappy.uncompress(compressed);
         }
     };
