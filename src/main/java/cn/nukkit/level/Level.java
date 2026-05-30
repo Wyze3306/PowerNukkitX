@@ -42,11 +42,13 @@ import cn.nukkit.inventory.BlockInventoryHolder;
 import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemBucket;
 import cn.nukkit.item.enchantment.Enchantment;
+import cn.nukkit.level.format.Chunk;
 import cn.nukkit.level.format.ChunkSection;
 import cn.nukkit.level.format.ChunkState;
 import cn.nukkit.level.format.IChunk;
 import cn.nukkit.level.format.LevelConfig;
 import cn.nukkit.level.format.LevelProvider;
+import cn.nukkit.level.format.UnsafeChunk;
 import cn.nukkit.level.format.leveldb.LevelDBProvider;
 import cn.nukkit.level.generator.BiomedGenerator;
 import cn.nukkit.level.generator.Generator;
@@ -290,6 +292,7 @@ public class Level implements Metadatable {
         randomTickBlocks.add(BlockID.OPEN_EYEBLOSSOM);
         randomTickBlocks.add(BlockID.WEEPING_VINES);
         randomTickBlocks.add(BlockID.WATER);
+        randomTickBlocks.add(BlockID.MANGROVE_PROPAGULE);
     }
 
     @NonComputationAtomic
@@ -2311,7 +2314,11 @@ public class Level implements Metadatable {
                 chunk = getChunkIfLoaded(cx, cz);
             }
             if (chunk != null) {
-                fullState = chunk.getBlockState(x & 0xF, y, z & 0xF, layer);
+                if(chunk.isFinished()) {
+                    fullState = chunk.getBlockState(x & 0xF, y, z & 0xF, layer);
+                } else {
+                    fullState = new UnsafeChunk((Chunk) chunk).getBlockState(x & 0xF, y, z & 0xF, layer);
+                }
             }
         }
         return Registries.BLOCK.get(fullState, x, y, z, layer, this);
@@ -3053,9 +3060,6 @@ public class Level implements Metadatable {
                     }
                 }
             } else {
-                if ((item instanceof ItemBucket itemBucket) && itemBucket.isWater()) {
-                    player.getLevel().sendBlocks(new Player[]{player}, new Block[]{Block.get(BlockID.AIR, target)}, UpdateBlockPacket.FLAG_ALL_PRIORITY, 1);
-                }
                 return null;
             }
         }
@@ -4055,7 +4059,7 @@ public class Level implements Metadatable {
             final Int2ObjectNonBlockingMap<Player> players = this.chunkSendQueue.get(index);
             if (players != null) {
                 IChunk chunk = this.getChunk(x, z);
-                if (chunk.getChunkState().canSend()) {
+                if (chunk != null && chunk.getChunkState().canSend()) {
                     final var pair = this.requireProvider().requestChunkData(x, z);
                     for (Player player : Objects.requireNonNull(players).values()) {
                         if (player.isConnected()) {
@@ -4076,6 +4080,10 @@ public class Level implements Metadatable {
                     }
                     this.chunkSendQueue.remove(index);
                 } else if (!this.chunkGenerationQueue.containsKey(index)) {
+                    if (chunk.getChunkState().ordinal() > ChunkState.NEW.ordinal()) {
+                        log.warn("processChunkRequest: chunk ({}, {}) in level '{}' has non-sendable state {} - requesting generation.",
+                                x, z, getFolderName(), chunk.getChunkState());
+                    }
                     this.generateChunk(x, z, true);
                 }
             }
@@ -4583,6 +4591,12 @@ public class Level implements Metadatable {
         long index = Level.chunkHash(x, z);
         if (this.chunkGenerationQueue.putIfAbsent(index, Boolean.TRUE) == null) {
             final IChunk chunk = this.getChunk(x, z, true);
+            if (chunk != null && chunk.getChunkState().canSend()) {
+                this.chunkGenerationQueue.remove(index);
+                log.warn("generateChunk called on already-sendable chunk ({}, {}) in level '{}' with state {}. This is a bug - please report it ASAP!",
+                        x, z, getFolderName(), chunk.getChunkState(), new RuntimeException("generateChunk guard triggered"));
+                return;
+            }
             this.generator.asyncGenerate(chunk, (c) -> chunkGenerationQueue.remove(c.getChunk().getIndex()));//async
         }
     }
@@ -4592,6 +4606,12 @@ public class Level implements Metadatable {
         if(isChunkGenerating(x, z) && getChunk(x, z, false).getChunkState() == ChunkState.NEW) removeFromGenerateList(x, z);
         if (this.chunkGenerationQueue.putIfAbsent(index, Boolean.TRUE) == null) {
             IChunk chunk = this.getChunk(x, z, true);
+            if (chunk != null && chunk.getChunkState().canSend()) {
+                this.chunkGenerationQueue.remove(index);
+                log.warn("syncGenerateChunk called on already-sendable chunk ({}, {}) in level '{}' with state {}. This is a bug - please report it ASAP!",
+                        x, z, getFolderName(), chunk.getChunkState(), new RuntimeException("syncGenerateChunk guard triggered"));
+                return;
+            }
             this.generator.syncGenerate(chunk);
             chunkGenerationQueue.remove(index);
         }
@@ -4734,7 +4754,7 @@ public class Level implements Metadatable {
                         .filter(Objects::nonNull)
                         .collect(Collectors.toUnmodifiableSet());
 
-                if (!chunksToSave.isEmpty()) {
+                if (!chunksToSave.isEmpty() && getAutoSave()) {
                     requireProvider().saveChunks(chunksToSave);
                 }
 

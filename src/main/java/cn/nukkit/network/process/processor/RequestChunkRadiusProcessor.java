@@ -9,12 +9,12 @@ import org.jetbrains.annotations.NotNull;
 public class RequestChunkRadiusProcessor extends DataPacketProcessor<RequestChunkRadiusPacket> {
 
     /** Bedrock UI lets the player request 4..32. Anything outside this range is malicious. */
-    private static final int MIN_RADIUS = 2;
-    private static final int MAX_RADIUS = 32;
+    private static final int MIN_CHUNK_RADIUS = 2;
+    private static final int MAX_CHUNK_RADIUS = 32;
 
     @Override
     public void handle(@NotNull PlayerHandle playerHandle, @NotNull RequestChunkRadiusPacket pk) {
-        int radius = Math.max(MIN_RADIUS, Math.min(pk.radius, MAX_RADIUS));
+        int radius = Math.max(MIN_CHUNK_RADIUS, Math.min(pk.radius, MAX_CHUNK_RADIUS));
         playerHandle.player.setViewDistance(radius);
     }
 
