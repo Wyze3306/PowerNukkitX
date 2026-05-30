@@ -441,16 +441,26 @@ public class Level implements Metadatable {
         this.folderPath = path;
         this.time = levelProvider.getTime();
 
-        this.raining = levelProvider.isRaining();
-        this.rainTime = this.requireProvider().getRainTime();
-        if (this.rainTime <= 0) {
-            setRainTime(ThreadLocalRandom.current().nextInt(168000) + 12000);
-        }
+        if (this.server.isWeatherCycleDisabled()) {
+            // Weather cycle frozen: ignore any rain/thunder state persisted in level.dat
+            // (a world saved while raining would otherwise stay raining forever, since
+            // the tick loop never clears it). Start clear; manual /weather still works.
+            this.raining = false;
+            this.thundering = false;
+            this.rainTime = ThreadLocalRandom.current().nextInt(168000) + 12000;
+            this.thunderTime = ThreadLocalRandom.current().nextInt(168000) + 12000;
+        } else {
+            this.raining = levelProvider.isRaining();
+            this.rainTime = this.requireProvider().getRainTime();
+            if (this.rainTime <= 0) {
+                setRainTime(ThreadLocalRandom.current().nextInt(168000) + 12000);
+            }
 
-        this.thundering = levelProvider.isThundering();
-        this.thunderTime = levelProvider.getThunderTime();
-        if (this.thunderTime <= 0) {
-            setThunderTime(ThreadLocalRandom.current().nextInt(168000) + 12000);
+            this.thundering = levelProvider.isThundering();
+            this.thunderTime = levelProvider.getThunderTime();
+            if (this.thunderTime <= 0) {
+                setThunderTime(ThreadLocalRandom.current().nextInt(168000) + 12000);
+            }
         }
         this.noSleepNights = levelProvider.getNoSleepNight();
         this.levelCurrentTick = levelProvider.getCurrentTick();
