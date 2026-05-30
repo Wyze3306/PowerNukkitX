@@ -5,6 +5,7 @@ import cn.nukkit.level.generator.Generator;
 import cn.nukkit.level.generator.Nether;
 import cn.nukkit.level.generator.Normal;
 import cn.nukkit.level.generator.TheEnd;
+import cn.nukkit.level.generator.Void;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 
 import java.util.Locale;
@@ -23,6 +24,7 @@ public class GeneratorRegistry implements IRegistry<String, Class<? extends Gene
             register("normal", Normal.class);
             register("nether", Nether.class);
             register("the_end", TheEnd.class);
+            register("void", Void.class);
         } catch (RegisterException e) {
             throw new RuntimeException(e);
         }

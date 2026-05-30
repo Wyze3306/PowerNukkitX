@@ -7,6 +7,7 @@ import cn.nukkit.level.generator.stages.end.TheEndPopulatorStage;
 import cn.nukkit.level.generator.stages.end.TheEndTerrainStage;
 import cn.nukkit.level.generator.stages.FinishedStage;
 import cn.nukkit.level.generator.stages.flat.FlatGenerateStage;
+import cn.nukkit.level.generator.stages.voidgen.VoidGenerateStage;
 import cn.nukkit.level.generator.stages.LightPopulationStage;
 import cn.nukkit.level.generator.stages.BiomeMapStage;
 import cn.nukkit.level.generator.stages.nether.NetherPopulatorStage;
@@ -32,6 +33,7 @@ public class GenerateStageRegistry implements IRegistry<String, GenerateStage, C
             this.register(FinishedStage.NAME, FinishedStage.class);
             this.register(GeneratedStage.NAME, GeneratedStage.class);
             this.register(FlatGenerateStage.NAME, FlatGenerateStage.class);
+            this.register(VoidGenerateStage.NAME, VoidGenerateStage.class);
             this.register(LightPopulationStage.NAME, LightPopulationStage.class);
             this.register(BiomeMapStage.NAME, BiomeMapStage.class);
             this.register(NormalTerrainStage.NAME, NormalTerrainStage.class);

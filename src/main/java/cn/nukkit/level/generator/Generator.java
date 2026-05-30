@@ -66,7 +66,7 @@ public abstract class Generator implements BlockID {
         if (start == null) {
             return context.getChunk();
         }
-        CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+        CompletableFuture<java.lang.Void> future = CompletableFuture.runAsync(() -> {
             start.apply(context);
         }, start.getExecutor());
         GenerateStage now = start;
