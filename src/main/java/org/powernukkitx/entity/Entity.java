@@ -79,6 +79,7 @@ import org.powernukkitx.scheduler.Task;
 import org.powernukkitx.tags.ItemTags;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import org.powernukkitx.utils.ChunkException;
+import org.powernukkitx.utils.FaultBarrier;
 import org.powernukkitx.utils.Hash;
 import org.powernukkitx.utils.Identifier;
 import org.powernukkitx.utils.PortalHelper;
@@ -5787,7 +5788,11 @@ public abstract class Entity extends Location implements Metadatable, EntityID {
         this.hasSpawned.clear();
 
         for (Player player : players) {
-            this.spawnTo(player);
+            try {
+                this.spawnTo(player);
+            } catch (Throwable e) {
+                FaultBarrier.report("respawning an entity to a player", this, e);
+            }
         }
     }
 
@@ -5798,14 +5803,24 @@ public abstract class Entity extends Location implements Metadatable, EntityID {
 
         for (Player player : this.level.getChunkPlayers(this.chunk.getX(), this.chunk.getZ()).values()) {
             if (player.isOnline()) {
-                this.spawnTo(player);
+                try {
+                    this.spawnTo(player);
+                } catch (Throwable e) {
+                    // An entity that cannot be spawned is a bad entity, not a bad player: report it
+                    // once and keep going, rather than letting it abort whatever created it.
+                    FaultBarrier.report("spawning an entity to a player", this, e);
+                }
             }
         }
     }
 
     public void despawnFromAll() {
         for (Player player : this.hasSpawned.values()) {
-            this.despawnFrom(player);
+            try {
+                this.despawnFrom(player);
+            } catch (Throwable e) {
+                FaultBarrier.report("despawning an entity from a player", this, e);
+            }
         }
     }
 

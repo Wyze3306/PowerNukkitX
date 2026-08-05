@@ -467,9 +467,15 @@ public class SimpleCommandMap implements CommandMap {
             } else {
                 output = target.execute(sender, sentCommandLabel, args) ? 1 : 0;
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error(this.server.getLanguage().tr("nukkit.command.exception", cmdLine, target.toString(), Utils.getExceptionMessage(e)), e);
             sender.sendMessage(new TranslationContainer(TextFormat.RED + "%commands.generic.exception"));
+            if (sender.isOp()) {
+                // An operator running a broken command should not have to read the console to find
+                // out what broke; everyone else keeps the generic message.
+                sender.sendMessage(TextFormat.DARK_RED + e.getClass().getSimpleName()
+                        + (e.getMessage() == null ? "" : ": " + e.getMessage()));
+            }
             output = 0;
         }
 

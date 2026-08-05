@@ -117,6 +117,9 @@ public class PowerNukkitX {
         // Netty logger for debug info
         InternalLoggerFactory.setDefaultFactory(Log4J2LoggerFactory.INSTANCE);
 
+        // A thread that dies on an uncaught throwable prints to stderr by default, which the
+        // TerminalConsole appender does not capture: the thread just stops and the server silently
+        // loses whatever it was responsible for. Route it through the logger instead.
         Thread.setDefaultUncaughtExceptionHandler((thread, thrown) ->
             log.error("Thread {} died on an uncaught throwable", thread.getName(), thrown));
 

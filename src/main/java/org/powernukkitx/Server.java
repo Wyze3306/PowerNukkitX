@@ -1071,8 +1071,15 @@ public class Server {
     private void checkTickUpdates(int currentTick) {
         boolean tickPlayers = getSettings().levelSettings().alwaysTickPlayers();
         for (Player player : new ArrayList<>(this.players.values())) {
-            if (tickPlayers) player.onUpdate(currentTick);
-            if (!player.spawned) player.checkNetwork();
+            try {
+                if (tickPlayers) player.onUpdate(currentTick);
+                if (!player.spawned) player.checkNetwork();
+            } catch (Throwable e) {
+                // Without this barrier one player's broken state skips every player after it in the
+                // list and aborts the rest of the server tick, every tick: the server looks frozen
+                // to everybody instead of to the one player at fault.
+                FaultBarrier.isolate(player, "ticking a player", e);
+            }
         }
 
         int baseTickRate = getSettings().levelSettings().baseTickRate();
@@ -1213,14 +1220,24 @@ public class Server {
                     }
                     for (BlockEntity be : chunk.getBlockEntities().values()) {
                         if (!be.closed) {
-                            be.saveNBT();
-                            be.serializationSnapshot = be.getNbt().copy();
+                            try {
+                                be.saveNBT();
+                                be.serializationSnapshot = be.getNbt().copy();
+                            } catch (Throwable e) {
+                                // This snapshot loop runs inside the server tick: one object that cannot
+                                // be serialised would abort the rest of the tick on every autosave.
+                                FaultBarrier.report("snapshotting a block entity for autosave", be, e);
+                            }
                         }
                     }
                     for (Entity entity : chunk.getEntities().values()) {
                         if (!(entity instanceof Player) && !entity.closed) {
-                            entity.saveNBT();
-                            entity.serializationSnapshot = entity.getNbt().copy();
+                            try {
+                                entity.saveNBT();
+                                entity.serializationSnapshot = entity.getNbt().copy();
+                            } catch (Throwable e) {
+                                FaultBarrier.report("snapshotting an entity for autosave", entity, e);
+                            }
                         }
                     }
                 }

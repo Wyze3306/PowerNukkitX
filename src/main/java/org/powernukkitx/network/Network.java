@@ -154,6 +154,7 @@ public class Network implements NetworkInterface {
                         channel.pipeline().addLast("queryPacketCodec", new QueryPacketCodec())
                             .addLast("queryPacketHandler", new QueryPacketHandler(address -> Network.this.server.getQueryInformation()));
                     }
+                    channel.pipeline().addLast("writeFailureReporter", new WriteFailureReporter());
                 }
 
                 @Override

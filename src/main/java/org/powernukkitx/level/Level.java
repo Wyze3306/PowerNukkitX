@@ -1546,8 +1546,15 @@ public class Level implements Metadatable {
                     if (entity instanceof EntityAsyncPrepare) {
                         seenAsyncPrepare = true;
                     }
-                    if (entity.closed || !entity.onUpdate(currentTick)) {
+                    try {
+                        if (entity.closed || !entity.onUpdate(currentTick)) {
+                            this.updateEntities.remove(id);
+                        }
+                    } catch (Throwable e) {
+                        // A single entity that throws on every tick would otherwise abort the whole
+                        // level tick forever. Stop ticking it and let the rest of the level run.
                         this.updateEntities.remove(id);
+                        FaultBarrier.report("ticking an entity (it will no longer be ticked)", entity, e);
                     }
                 }
                 this.hasAsyncPrepareEntities = seenAsyncPrepare;
@@ -4804,20 +4811,26 @@ public class Level implements Metadatable {
                     try {
                         for (Player player : playersToSend.values()) {
                             if (player.isConnected()) {
-                                final NetworkChunkPublisherUpdatePacket networkChunkPublisherUpdatePacket = new NetworkChunkPublisherUpdatePacket();
-                                networkChunkPublisherUpdatePacket.setNewPositionForView(player.asBlockVector3().toNetwork());
-                                networkChunkPublisherUpdatePacket.setNewRadiusForView(player.getViewDistance() << 4);
-                                player.sendPacketImmediately(networkChunkPublisherUpdatePacket);
+                                try {
+                                    final NetworkChunkPublisherUpdatePacket networkChunkPublisherUpdatePacket = new NetworkChunkPublisherUpdatePacket();
+                                    networkChunkPublisherUpdatePacket.setNewPositionForView(player.asBlockVector3().toNetwork());
+                                    networkChunkPublisherUpdatePacket.setNewRadiusForView(player.getViewDistance() << 4);
+                                    player.sendPacketImmediately(networkChunkPublisherUpdatePacket);
 
-                                final LevelChunkPacket levelChunkPacket;
-                                levelChunkPacket = new LevelChunkPacket();
-                                levelChunkPacket.setChunkX(x);
-                                levelChunkPacket.setChunkZ(z);
-                                levelChunkPacket.setDimension(DimensionType.from(this.getDimensionData().getDimensionId()));
-                                levelChunkPacket.setSubChunksCount(pair.second());
-                                levelChunkPacket.setSerializedChunkData(/*Unpooled.buffer()*/chunkData.retainedDuplicate());
-                                player.sendChunk(x, z, levelChunkPacket);
-                                //player.refreshBlockEntity(chunk);
+                                    final LevelChunkPacket levelChunkPacket;
+                                    levelChunkPacket = new LevelChunkPacket();
+                                    levelChunkPacket.setChunkX(x);
+                                    levelChunkPacket.setChunkZ(z);
+                                    levelChunkPacket.setDimension(DimensionType.from(this.getDimensionData().getDimensionId()));
+                                    levelChunkPacket.setSubChunksCount(pair.second());
+                                    levelChunkPacket.setSerializedChunkData(/*Unpooled.buffer()*/chunkData.retainedDuplicate());
+                                    player.sendChunk(x, z, levelChunkPacket);
+                                    //player.refreshBlockEntity(chunk);
+                                } catch (Throwable e) {
+                                    // Chunk delivery is shared: a failure for one player must not stop
+                                    // the players queued behind them from receiving this chunk.
+                                    FaultBarrier.report("sending a chunk to a player", player, e);
+                                }
                             }
                         }
                     } finally {

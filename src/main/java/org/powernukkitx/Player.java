@@ -182,6 +182,7 @@ import org.powernukkitx.scoreboard.scorer.PlayerScorer;
 import org.powernukkitx.utils.BlockIterator;
 import org.powernukkitx.utils.BossBarColor;
 import org.powernukkitx.utils.DummyBossBar;
+import org.powernukkitx.utils.FaultBarrier;
 import org.powernukkitx.utils.Identifier;
 import org.powernukkitx.utils.ItemHelper;
 import org.powernukkitx.utils.PortalHelper;
@@ -2895,7 +2896,14 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         if (this.spawned && this.level.getProvider() != null) {
             for (Entity entity : this.level.getChunkEntities(x, z).values()) {
                 if (this != entity && !entity.closed && entity.isAlive()) {
-                    entity.spawnTo(this);
+                    try {
+                        entity.spawnTo(this);
+                    } catch (Throwable e) {
+                        // One entity that cannot be spawned (a bad skin, a half-built packet) must not
+                        // cost this player the rest of the chunk's entities and all of its block
+                        // entities, nor abort chunk delivery for the players queued behind them.
+                        FaultBarrier.report("spawning an entity to " + this.getName(), entity, e);
+                    }
                 }
             }
         }
@@ -2903,7 +2911,11 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         if (this.level.getProvider() != null) {
             for (BlockEntity entity : this.level.getChunkBlockEntities(x, z).values()) {
                 if (entity instanceof BlockEntitySpawnable spawnable) {
-                    spawnable.spawnTo(this);
+                    try {
+                        spawnable.spawnTo(this);
+                    } catch (Throwable e) {
+                        FaultBarrier.report("spawning a block entity to " + this.getName(), entity, e);
+                    }
                 }
             }
         }
@@ -2912,7 +2924,11 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             if (!this.isConnected() || this.level == null) return;
             for (BlockEntity entity : this.level.getChunkBlockEntities(x, z).values()) {
                 if ((entity instanceof BlockEntityItemFrame || entity instanceof BlockEntitySign) && !entity.closed) {
-                    ((BlockEntitySpawnable) entity).spawnTo(this);
+                    try {
+                        ((BlockEntitySpawnable) entity).spawnTo(this);
+                    } catch (Throwable e) {
+                        FaultBarrier.report("spawning a block entity to " + this.getName(), entity, e);
+                    }
                 }
             }
         }, 2);
@@ -2953,12 +2969,18 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
      * @param packet packet to send
      */
     public void sendPacket(BedrockPacket packet) {
-        final PacketSendEvent event = new PacketSendEvent(this, packet);
-        this.server.getPluginManager().callEvent(event);
-        if (event.isCancelled()) {
-            return;
+        try {
+            final PacketSendEvent event = new PacketSendEvent(this, packet);
+            this.server.getPluginManager().callEvent(event);
+            if (event.isCancelled()) {
+                return;
+            }
+            this.getSession().sendPacket(packet);
+        } catch (Throwable e) {
+            // Most sends happen inside a loop over several players (see Server#broadcastPacket): a
+            // failure here belongs to this player's session and must not cut the loop short.
+            FaultBarrier.report("sending " + packet.getClass().getSimpleName() + " to " + this.getName(), packet, e);
         }
-        this.getSession().sendPacket(packet);
     }
 
     /**
@@ -6428,13 +6450,18 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         if (!this.isConnected()) {
             return false;
         }
-        final PacketSendEvent event = new PacketSendEvent(this, packet);
-        this.server.getPluginManager().callEvent(event);
-        if (event.isCancelled()) {
+        try {
+            final PacketSendEvent event = new PacketSendEvent(this, packet);
+            this.server.getPluginManager().callEvent(event);
+            if (event.isCancelled()) {
+                return false;
+            }
+            this.getSession().sendPacketImmediately(packet);
+            return true;
+        } catch (Throwable e) {
+            FaultBarrier.report("sending " + packet.getClass().getSimpleName() + " to " + this.getName(), packet, e);
             return false;
         }
-        this.getSession().sendPacketImmediately(packet);
-        return true;
     }
 
     /**
