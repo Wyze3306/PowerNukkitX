@@ -28,9 +28,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class PacketTrace {
 
     /**
-     * How many packets are kept per traced player.
+     * How many entries are kept per traced player. A burst of identical packets counts as one.
      */
-    public static final int CAPACITY = 24;
+    public static final int CAPACITY = 48;
 
     private static final int SUMMARY_LIMIT = 300;
     private static final Map<String, PacketTrace> TRACES = new ConcurrentHashMap<>();
@@ -40,6 +40,8 @@ public final class PacketTrace {
 
     private final String[] summaries = new String[CAPACITY];
     private final long[] ticks = new long[CAPACITY];
+    private final String[] types = new String[CAPACITY];
+    private final int[] repeats = new int[CAPACITY];
     private int next;
     private int recorded;
 
@@ -103,9 +105,20 @@ public final class PacketTrace {
         if (summary.length() > SUMMARY_LIMIT) {
             summary = summary.substring(0, SUMMARY_LIMIT) + "…";
         }
+        final String type = packet.getClass().getSimpleName();
         synchronized (trace) {
+            // A single effect or movement routine can emit hundreds of identical packets in one
+            // tick. Counting a run as one entry keeps the window wide enough to still show what
+            // else was on the wire, which is the whole point of the trace.
+            final int last = (trace.next - 1 + CAPACITY) % CAPACITY;
+            if (trace.recorded > 0 && type.equals(trace.types[last]) && trace.ticks[last] == tick) {
+                trace.repeats[last]++;
+                return;
+            }
             trace.summaries[trace.next] = summary;
+            trace.types[trace.next] = type;
             trace.ticks[trace.next] = tick;
+            trace.repeats[trace.next] = 1;
             trace.next = (trace.next + 1) % CAPACITY;
             if (trace.recorded < CAPACITY) {
                 trace.recorded++;
@@ -136,7 +149,11 @@ public final class PacketTrace {
             final int start = trace.recorded < CAPACITY ? 0 : trace.next;
             for (int i = 0; i < trace.recorded; i++) {
                 final int slot = (start + i) % CAPACITY;
-                out.append("\n  tick ").append(trace.ticks[slot]).append(" | ").append(trace.summaries[slot]);
+                out.append("\n  tick ").append(trace.ticks[slot]).append(" | ");
+                if (trace.repeats[slot] > 1) {
+                    out.append('x').append(trace.repeats[slot]).append(' ');
+                }
+                out.append(trace.summaries[slot]);
             }
             if (trace.recorded == 0) {
                 out.append("\n  (nothing recorded)");
