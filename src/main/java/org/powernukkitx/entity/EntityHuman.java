@@ -232,12 +232,14 @@ public class EntityHuman extends EntityHumanType {
     @Override
     public void spawnTo(Player player) {
         if (this != player && !this.hasSpawned.containsKey(player.getLoaderId())) {
-            this.hasSpawned.put(player.getLoaderId(), player);
-
-
-            if (!SkinUtils.isValid(this.skin.getSkin())) {
-                throw new IllegalStateException(this.getClass().getSimpleName() + " must have a valid skin set");
+            if (this.skin == null || !SkinUtils.isValid(this.skin.getSkin())) {
+                // Checked before the entity is recorded as spawned: an entity that threw here would
+                // otherwise be remembered as visible to a player who never received it.
+                throw new IllegalStateException(this.getClass().getSimpleName() + " (id " + this.getId()
+                        + ", name '" + this.getNameTag() + "') must have a valid skin set");
             }
+
+            this.hasSpawned.put(player.getLoaderId(), player);
 
             if (this instanceof Player pl)
                 this.server.updatePlayerListData(this.getUniqueId(), this.getId(), pl.getDisplayName(), this.skin, pl.getXUID(), pl.getLocatorBarColor(), new Player[]{player});

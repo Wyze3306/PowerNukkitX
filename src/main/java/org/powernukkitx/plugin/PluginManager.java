@@ -603,7 +603,10 @@ public class PluginManager {
 
                 try {
                     registration.callEvent(event);
-                } catch (Exception e) {
+                } catch (Throwable e) {
+                    // Throwable, not Exception: a listener compiled against another API version
+                    // throws NoClassDefFoundError, which would otherwise escape into the tick loop
+                    // and take down every listener queued behind it.
                     log.error(this.server.getLanguage().tr("nukkit.plugin.eventError", event.getEventName(), registration.getPlugin().getDescription().getFullName(), e.getMessage(), registration.getListener().getClass().getName()), e);
                 }
             }
