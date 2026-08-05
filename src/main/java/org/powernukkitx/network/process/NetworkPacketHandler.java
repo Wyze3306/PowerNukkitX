@@ -4,6 +4,7 @@ import org.powernukkitx.Player;
 import org.powernukkitx.Server;
 import org.powernukkitx.event.server.PacketHandleEvent;
 import org.powernukkitx.event.server.PacketReceiveEvent;
+import org.powernukkitx.network.PacketTrace;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.cloudburstmc.protocol.bedrock.packet.BedrockPacket;
@@ -86,6 +87,7 @@ public class NetworkPacketHandler implements BedrockPacketHandler {
     public void onDisconnect(String reason) {
         final Player player = this.session.getPlayer();
         if (player != null) {
+            PacketTrace.dump(player, reason);
             if (player.spawned) {
                 player.requestClose(reason);
             } else {

@@ -5731,6 +5731,9 @@ public class Level implements Metadatable {
         } else {
             packet.setPositionMode(PositionMode.NORMAL);
         }
+        // No teleport data: the serializer writes it whenever it is set, and the client only expects
+        // that block for PositionMode.TELEPORT. This packet is the one bystanders receive when
+        // somebody else moves, so anything it gets wrong lands on them and not on the player moving.
 
         Server.broadcastPacket(entity.getViewers().values(), packet);
     }
