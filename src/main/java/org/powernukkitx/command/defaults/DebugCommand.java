@@ -31,6 +31,7 @@ import org.powernukkitx.level.generator.biome.result.OverworldBiomeResult;
 import org.powernukkitx.level.structure.AbstractStructure;
 import org.powernukkitx.level.structure.JeStructure;
 import org.powernukkitx.level.structure.StructureAPI;
+import org.powernukkitx.network.PacketTrace;
 import org.powernukkitx.math.NukkitMath;
 import org.powernukkitx.nbt.tag.CompoundTag;
 import org.powernukkitx.nbt.tag.LongTag;
@@ -112,6 +113,10 @@ public class DebugCommand extends TestCommand implements CoreCommand {
                 CommandParameter.newEnum("mspt", new String[]{"mspt"}),
                 CommandParameter.newEnum("off", true, new String[]{"off"})
         });
+        this.commandParameters.put("packets", new CommandParameter[]{
+                CommandParameter.newEnum("packets", new String[]{"packets"}),
+                CommandParameter.newType("target", CommandParamType.ID)
+        });
         this.enableParamTree();
     }
 
@@ -132,6 +137,7 @@ public class DebugCommand extends TestCommand implements CoreCommand {
             case "tps" -> handleTps(sender, result.getValue(), log);
             case "genrate" -> handleGenRate(sender);
             case "mspt" -> handleMspt(sender, result.getValue());
+            case "packets" -> handlePackets(sender, result.getValue());
             default -> 0;
         };
     }
@@ -434,6 +440,20 @@ public class DebugCommand extends TestCommand implements CoreCommand {
                 pm.reloadPlugin(plugin);
             }
         }
+        return 1;
+    }
+
+    private int handlePackets(CommandSender sender, ParamList value) {
+        final String target = value.getResult(1).toString();
+        if (target.equalsIgnoreCase("off")) {
+            PacketTrace.disarm();
+            sender.sendMessage("§ePacket tracing disabled.");
+            return 1;
+        }
+        PacketTrace.arm(target);
+        sender.sendMessage("§eTracing the last " + PacketTrace.CAPACITY + " packets sent to §f" + target
+                + "§e. They are printed to the console when that player's connection ends - including when the"
+                + " client hangs up on its own, which is what \"Session closed\" means. §c/debug packets off§e when done.");
         return 1;
     }
 

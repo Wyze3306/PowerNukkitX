@@ -165,6 +165,7 @@ import org.powernukkitx.nbt.tag.DoubleTag;
 import org.powernukkitx.nbt.tag.FloatTag;
 import org.powernukkitx.nbt.tag.ListTag;
 import org.powernukkitx.nbt.tag.StringTag;
+import org.powernukkitx.network.PacketTrace;
 import org.powernukkitx.network.primitiveshape.PrimitiveShapes;
 import org.powernukkitx.network.process.PacketHandler;
 import org.powernukkitx.network.process.auth.ClientChainData;
@@ -3016,6 +3017,7 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             if (event.isCancelled()) {
                 return;
             }
+            PacketTrace.record(this, packet, this.server.getTick());
             this.getSession().sendPacket(packet);
         } catch (Throwable e) {
             // Most sends happen inside a loop over several players (see Server#broadcastPacket): a
@@ -5306,6 +5308,8 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         }
 
         if (pk.getPositionMode() == PositionMode.TELEPORT) {
+            // Only a teleport carries this block; the serializer writes it whenever it is set, so
+            // attaching it to an ordinary move sends the client a field it is not reading there.
             final MovePlayerTeleportData teleportData = new MovePlayerTeleportData();
             teleportData.setTeleportationCause(TeleportationCause.UNKNOWN);
             pk.setTeleportData(teleportData);
@@ -6552,6 +6556,7 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             if (event.isCancelled()) {
                 return false;
             }
+            PacketTrace.record(this, packet, this.server.getTick());
             this.getSession().sendPacketImmediately(packet);
             return true;
         } catch (Throwable e) {

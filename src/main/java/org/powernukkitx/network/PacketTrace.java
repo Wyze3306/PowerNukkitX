@@ -1,0 +1,161 @@
+package org.powernukkitx.network;
+
+import lombok.extern.slf4j.Slf4j;
+import org.cloudburstmc.protocol.bedrock.packet.BedrockPacket;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.powernukkitx.Player;
+
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Records the last packets sent to a player so that a client which hangs up leaves something behind.
+ * <p>
+ * A Bedrock client that cannot make sense of a packet does not tell the server why: it closes the
+ * RakNet connection, which arrives as {@code disconnect.closed} and is indistinguishable from
+ * someone leaving from the pause menu. There is no server-side throwable to log, so the only way to
+ * find the packet responsible is to know what was on the wire just before the client left. Arm this
+ * on the player who gets dropped - which for a broadcast is usually a bystander rather than the
+ * player performing the action - reproduce, and read the dump.
+ * <p>
+ * Disarmed by default and gated behind a single volatile read, so a server that is not debugging
+ * pays one predictable branch per sent packet. While armed it calls {@code toString} on every packet
+ * sent to a traced player, which is expensive: this is a debugging tool, not something to leave on.
+ */
+@Slf4j
+public final class PacketTrace {
+
+    /**
+     * How many packets are kept per traced player.
+     */
+    public static final int CAPACITY = 24;
+
+    private static final int SUMMARY_LIMIT = 300;
+    private static final Map<String, PacketTrace> TRACES = new ConcurrentHashMap<>();
+
+    private static volatile boolean armed;
+    private static volatile boolean everyone;
+
+    private final String[] summaries = new String[CAPACITY];
+    private final long[] ticks = new long[CAPACITY];
+    private int next;
+    private int recorded;
+
+    private PacketTrace() {
+    }
+
+    /**
+     * Arms the recorder for one player, by name, or for everyone.
+     *
+     * @param target a player name, or {@code all} for every player currently online and every player
+     *               who joins afterwards
+     */
+    public static void arm(@NotNull String target) {
+        if (target.equalsIgnoreCase("all")) {
+            everyone = true;
+        } else {
+            TRACES.putIfAbsent(target.toLowerCase(Locale.ENGLISH), new PacketTrace());
+        }
+        armed = true;
+    }
+
+    /**
+     * Disarms every recorder and drops what was recorded.
+     */
+    public static void disarm() {
+        armed = false;
+        everyone = false;
+        TRACES.clear();
+    }
+
+    public static boolean isArmed() {
+        return armed;
+    }
+
+    /**
+     * Names currently traced by name, not counting an {@code all} that is in effect.
+     */
+    public static int tracedCount() {
+        return TRACES.size();
+    }
+
+    /**
+     * Records one outbound packet. Returns immediately when nothing is being traced.
+     * <p>
+     * Safe to call from any thread.
+     */
+    public static void record(@NotNull Player player, @NotNull BedrockPacket packet, long tick) {
+        if (!armed) {
+            return;
+        }
+        final PacketTrace trace = traceFor(player);
+        if (trace == null) {
+            return;
+        }
+        String summary;
+        try {
+            summary = packet.toString();
+        } catch (Throwable describeFailed) {
+            summary = packet.getClass().getSimpleName() + " <toString failed: " + describeFailed + '>';
+        }
+        if (summary.length() > SUMMARY_LIMIT) {
+            summary = summary.substring(0, SUMMARY_LIMIT) + "…";
+        }
+        synchronized (trace) {
+            trace.summaries[trace.next] = summary;
+            trace.ticks[trace.next] = tick;
+            trace.next = (trace.next + 1) % CAPACITY;
+            if (trace.recorded < CAPACITY) {
+                trace.recorded++;
+            }
+        }
+    }
+
+    /**
+     * Prints what was sent to a player before their connection went away, oldest first, and forgets
+     * it. No-op when that player was not being traced.
+     *
+     * @param reason the disconnect reason the network layer reported
+     */
+    public static void dump(@NotNull Player player, @Nullable String reason) {
+        if (!armed) {
+            return;
+        }
+        final PacketTrace trace = everyone
+                ? TRACES.get(player.getName().toLowerCase(Locale.ENGLISH))
+                : TRACES.remove(player.getName().toLowerCase(Locale.ENGLISH));
+        if (trace == null) {
+            return;
+        }
+        final StringBuilder out = new StringBuilder(1024);
+        out.append("Last packets sent to ").append(player.getName())
+                .append(" before the connection ended (").append(reason).append("), oldest first:");
+        synchronized (trace) {
+            final int start = trace.recorded < CAPACITY ? 0 : trace.next;
+            for (int i = 0; i < trace.recorded; i++) {
+                final int slot = (start + i) % CAPACITY;
+                out.append("\n  tick ").append(trace.ticks[slot]).append(" | ").append(trace.summaries[slot]);
+            }
+            if (trace.recorded == 0) {
+                out.append("\n  (nothing recorded)");
+            }
+            trace.recorded = 0;
+            trace.next = 0;
+        }
+        log.warn(out.toString());
+    }
+
+    private static PacketTrace traceFor(Player player) {
+        final String name = player.getName();
+        if (name == null) {
+            return null;
+        }
+        final String key = name.toLowerCase(Locale.ENGLISH);
+        if (everyone) {
+            return TRACES.computeIfAbsent(key, unused -> new PacketTrace());
+        }
+        return TRACES.get(key);
+    }
+}
