@@ -13,7 +13,6 @@ import org.powernukkitx.command.simple.SimpleCommand;
 import org.powernukkitx.command.utils.CommandLogger;
 
 import org.powernukkitx.lang.CommandOutputContainer;
-import org.powernukkitx.lang.TranslationContainer;
 
 import org.powernukkitx.plugin.InternalPlugin;
 
@@ -469,7 +468,7 @@ public class SimpleCommandMap implements CommandMap {
             }
         } catch (Throwable e) {
             log.error(this.server.getLanguage().tr("nukkit.command.exception", cmdLine, target.toString(), Utils.getExceptionMessage(e)), e);
-            sender.sendMessage(new TranslationContainer(TextFormat.RED + "%commands.generic.exception"));
+            sender.sendMessage(TextFormat.RED + this.server.getLanguage().tr("commands.generic.exception"));
             if (sender.isOp()) {
                 // An operator running a broken command should not have to read the console to find
                 // out what broke; everyone else keeps the generic message.

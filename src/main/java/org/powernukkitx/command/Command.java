@@ -302,7 +302,12 @@ public abstract class Command {
         }
 
         if (this.permissionMessage == null) {
-            target.sendMessage(new TranslationContainer(TextFormat.RED + "%commands.generic.unknown", this.name));
+            // Translated here rather than shipped as a TranslationContainer: a container whose key is
+            // prefixed with a colour code cannot be looked up by the client, so it would arrive as a
+            // TRANSLATE body the client formats itself, with the colour code left sitting in front of
+            // the key as a stray conversion. This branch is the one every player without the
+            // permission goes through, so it must not hand the client a string to format.
+            target.sendMessage(TextFormat.RED + target.getServer().getLanguage().tr("commands.generic.unknown", this.name));
         } else if (!this.permissionMessage.isEmpty()) {
             target.sendMessage(this.permissionMessage.replace("<permission>", this.permission));
         }
