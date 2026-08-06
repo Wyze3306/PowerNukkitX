@@ -231,6 +231,12 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
     public static final int PERMISSION_VISITOR = 0;
     private static final byte PLAYER_FLAG_SLEEP = 0x2;
     private static final long POST_TELEPORT_GRACE_MS = 1000L;
+    /**
+     * How close to the destination a client has to report itself for a cross level teleport to
+     * count as applied. Generous enough to cover the ground it covers on its own between receiving
+     * the teleport and answering it.
+     */
+    private static final double TELEPORT_ACK_DISTANCE = 2;
     /// static fields
     public boolean playedBefore;
     public boolean spawned = false;
@@ -419,6 +425,13 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
 
     // TODO: hack for receive a error position after teleport
     private Pair<Location, Long> lastTeleportMessage;
+    /**
+     * Where the player stood when {@link #lastTeleportMessage} was sent. The moves already in
+     * flight when a teleport is issued describe that spot and not the destination, so they are
+     * dropped until the client confirms it applied the teleport, see {@link #offerMovementTask}.
+     */
+    private Location teleportOrigin;
+    private boolean awaitingTeleportAck;
 
     private Color locatorBarColor;
     private final @NotNull PlayerInfo info;
@@ -1201,21 +1214,47 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             return;
         }
 
-        long now = System.currentTimeMillis();
-
-        if (lastTeleportMessage != null && now - lastTeleportMessage.right() < POST_TELEPORT_GRACE_MS) {
-            Location teleportDestination = lastTeleportMessage.left();
-            double destinationDistance = newPosition.distance(teleportDestination);
-
-            if (destinationDistance > movementDistanceThreshold) {
+        if (this.awaitingTeleportAck) {
+            if (!acknowledgesTeleport(newPosition)) {
+                // Sent before the client applied the teleport: it still describes the spot the
+                // player left, and replaying it would drag them back there.
                 return;
             }
+            // The client has caught up, so everything from now on is real movement. Filtering for
+            // the whole grace window instead would pin the player to the destination for a full
+            // second, freezing them for every other player watching.
+            this.awaitingTeleportAck = false;
         }
 
         this.newPosition = newPosition;
         if (!this.clientMovements.offer(newPosition)) {
             log.warn("Failed to enqueue movement task for player {} at position {}", this.getName(), newPosition);
         }
+    }
+
+    /**
+     * Whether a position reported by the client can only have been produced after it applied the
+     * last teleport, which is the case as soon as it is no further from the destination than from
+     * the spot the player was teleported away from.
+     *
+     * @param clientPosition the position the client reported
+     * @return true once the teleport is confirmed, or the client had long enough to confirm it
+     */
+    private boolean acknowledgesTeleport(Location clientPosition) {
+        final Pair<Location, Long> teleport = this.lastTeleportMessage;
+        if (teleport == null
+            || System.currentTimeMillis() - teleport.right() >= POST_TELEPORT_GRACE_MS) {
+            // A client that never confirms must not be able to pin itself in place for good.
+            return true;
+        }
+
+        final Location destination = teleport.left();
+        final Location origin = this.teleportOrigin;
+        if (origin != null && origin.getLevel() == destination.getLevel()) {
+            return clientPosition.distanceSquared(destination) <= clientPosition.distanceSquared(origin);
+        }
+        // Across levels the old coordinates say nothing about the new ones, so only arriving counts.
+        return clientPosition.distanceSquared(destination) <= TELEPORT_ACK_DISTANCE * TELEPORT_ACK_DISTANCE;
     }
 
 
@@ -2888,10 +2927,20 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             return;
         }
 
-        this.chunkLoadCount++;
         synchronized (playerChunkManager) {
-            this.playerChunkManager.getUsedChunks().add(Level.chunkHash(x, z));
+            // The chunk was serialised for a request made at least a tick ago, and it may have left
+            // the player's view since then - a view distance change, a fast walk, a teleport. When
+            // that happens the manager has already unregistered this player as a loader for it and
+            // despawned its entities; accepting the chunk now would mark it as received while the
+            // player loads nothing there, so it would get no entity spawns and no block updates
+            // until it leaves the radius and comes back. Whatever is still in radius is re-queued
+            // by the manager, so dropping the stale copy only costs one re-send.
+            if (!this.playerChunkManager.isSentChunk(Level.chunkHash(x, z))) {
+                return;
+            }
         }
+
+        this.chunkLoadCount++;
         this.sendPacket(packet);
 
         if (this.spawned && this.level.getProvider() != null) {
@@ -5281,6 +5330,8 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
                 to.clone(),
                 System.currentTimeMillis()
         );
+        this.teleportOrigin = from.clone();
+        this.awaitingTeleportAck = true;
 
         //remove inventory, ride,sign editor
         for (Inventory window : new ArrayList<>(this.windows.keySet())) {
@@ -5307,7 +5358,17 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
 
         clientMovements.clear();
         //switch level, update pos and rotation, update aabb
-        if (setPositionAndRotation(to, to.getYaw(), to.getPitch(), to.getHeadYaw())) {
+        final boolean moved = setPositionAndRotation(to, to.getYaw(), to.getPitch(), to.getHeadYaw());
+        if (switchLevel) {
+            // Two levels can share a dimension id, so the client is never told to drop what it was
+            // rendering in the level the player just left: shrinking the view radius and restoring
+            // it is what forces that purge. It has to happen before the destination's chunks are
+            // prepared - run afterwards, the shrink unregisters this player as a loader for
+            // everything handleTeleport() had just registered and requested, while the requests
+            // already handed to the level still get delivered.
+            refreshChunkRender();
+        }
+        if (moved) {
             //if switch level or the distance teleported is too far
             if (switchLevel) {
                 this.playerChunkManager.handleTeleport();
@@ -5323,18 +5384,29 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
                 this.sendPosition(to, to.yaw, to.pitch, PositionMode.TELEPORT);
             }
             this.newPosition = to;
+            // Everyone else only learns about this player from the moves the client echoes back,
+            // which arrive a round trip later and are flagged as ordinary movement: bystanders
+            // would interpolate the player over the whole distance, then get corrected once the
+            // real position catches up. Hand them the destination now, marked as a teleport so it
+            // snaps, and treat it as the last broadcast position so the echo adds nothing.
+            this.lastX = this.x;
+            this.lastY = this.y;
+            this.lastZ = this.z;
+            this.lastYaw = this.yaw;
+            this.lastPitch = this.pitch;
+            this.lastHeadYaw = this.headYaw;
+            this.broadcastMovement(true);
         } else {
             if (sendToSelf) {
                 this.sendPosition(this, to.yaw, to.pitch, PositionMode.TELEPORT);
             }
             this.newPosition = this;
+            // The player never left: there is no teleport left for the client to confirm.
+            this.awaitingTeleportAck = false;
         }
         //state update
         this.positionChanged = true;
 
-        if (switchLevel) {
-            refreshChunkRender();
-        }
         this.resetFallDistance();
         //DummyBossBar
         this.getDummyBossBars().values().forEach(DummyBossBar::reshow);

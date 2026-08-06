@@ -948,9 +948,12 @@ public abstract class Block extends Position implements Metadatable, AxisAligned
     public double calculateBreakTime(@NotNull Item item, @Nullable Player player) {
         double seconds = this.calculateBreakTimeNotInAir(item, player);
 
-        if (player != null) {
+        if (player != null && !player.isFlying()) {
             // The player is considered to be digging on the ground only after 5 ticks have passed since the last time the player was in the air.
             // If you only use onGround detection, the time returned by this method will be discontinuous.
+            // A flying player is never onGround, so without the isFlying() guard the penalty would apply
+            // permanently. Since any item carrying a minecraft:digger component makes the server drive the
+            // breaking progress, that penalty is not just a mismatch: it really divides mining speed by 5.
             if (player.getLevel().getTick() - player.getLastInAirTick() < 5) {
                 seconds *= 5;
             }

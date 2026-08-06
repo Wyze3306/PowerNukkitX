@@ -4766,15 +4766,6 @@ public class Level implements Metadatable {
         }
     }
 
-    private void sendChunk(int x, int z, long index, BedrockPacket packet) {
-        for (Player player : this.chunkSendQueue.get(index).values()) {
-            if (player.isConnected() && player.getPlayerChunkManager().isSentChunk(index)) {
-                player.sendChunk(x, z, packet);
-            }
-        }
-        this.chunkSendQueue.remove(index);
-    }
-
     public void subTick(GameLoop currentTick) {
         try {
             processChunkRequest();
@@ -4812,11 +4803,11 @@ public class Level implements Metadatable {
                         for (Player player : playersToSend.values()) {
                             if (player.isConnected()) {
                                 try {
-                                    final NetworkChunkPublisherUpdatePacket networkChunkPublisherUpdatePacket = new NetworkChunkPublisherUpdatePacket();
-                                    networkChunkPublisherUpdatePacket.setNewPositionForView(player.asBlockVector3().toNetwork());
-                                    networkChunkPublisherUpdatePacket.setNewRadiusForView(player.getViewDistance() << 4);
-                                    player.sendPacketImmediately(networkChunkPublisherUpdatePacket);
-
+                                    // No view publisher update here: PlayerChunkManager already sent one
+                                    // for the whole batch this chunk belongs to. Repeating it per chunk
+                                    // cost an out-of-band packet, compressed and encrypted on its own,
+                                    // for every chunk of every player - the bulk of the work when a
+                                    // teleport drains a full view distance at once.
                                     final LevelChunkPacket levelChunkPacket;
                                     levelChunkPacket = new LevelChunkPacket();
                                     levelChunkPacket.setChunkX(x);

@@ -37,6 +37,13 @@ public final class PlayerChunkManager {
      */
     private static final long CHUNK_LOAD_TIMEOUT_MICROS = 10L;
 
+    /**
+     * How many chunks may be looked at for every chunk actually handed to the client. A chunk whose
+     * asynchronous load has not finished yet costs nothing to skip, so looking past it starts the
+     * loads further down the queue in parallel instead of one budget's worth at a time.
+     */
+    private static final int CHUNK_VISITS_PER_SEND = 4;
+
     private static final double MIN_FOV_CHECK_DISTANCE_SQUARED = MIN_FOV_CHECK_DISTANCE * MIN_FOV_CHECK_DISTANCE;
 
     private int comparatorLoaderChunkX;
@@ -120,11 +127,15 @@ public final class PlayerChunkManager {
         int loaderChunkZ = player.getChunkZ();
         updateInRadiusChunks(1, loaderChunkX, loaderChunkZ);
         removeOutOfRadiusChunks();
-        updateInRadiusChunks(8, loaderChunkX, loaderChunkZ);
+        updateInRadiusChunks(player.getViewDistance(), loaderChunkX, loaderChunkZ);
         pruneLoadingQueueOutOfRadius();
         pruneQueueOutOfRadius(chunkReadyToSend, true);
         updateChunkSendingQueue();
-        loadQueuedChunks(8, true);
+        // The client keeps rendering whatever surrounds the last view centre it was told about,
+        // which is the place the player just left. Move that centre now rather than when the first
+        // chunk of the destination happens to be ready, which is seconds away over unloaded terrain.
+        sendViewPublisherUpdate();
+        loadQueuedChunks(trySendChunkCountPerTick, true);
         sendChunk();
     }
 
@@ -225,13 +236,25 @@ public final class PlayerChunkManager {
         }
     }
 
-    private void loadQueuedChunks(int trySendChunkCountPerTick, boolean force) {
+    /**
+     * Move up to {@code sendBudget} chunks from the send queue to {@link #chunkReadyToSend}, and
+     * put back the ones whose asynchronous load has not finished yet.
+     *
+     * @param sendBudget how many chunks may be readied for the client in this pass
+     * @param force      whether missing chunks may be generated past the level's generation queue
+     */
+    private void loadQueuedChunks(int sendBudget, boolean force) {
         if (chunkSendQueue.isEmpty()) return;
-        int triedSendChunkCount = 0;
+        int readiedChunkCount = 0;
+        int visitedChunkCount = 0;
+        // Only chunks that made it to the client count against the budget, otherwise a teleport
+        // spends every pass re-queueing the same not-yet-loaded chunks and delivers nothing. The
+        // visit limit is what keeps that from walking the whole queue when nothing is ready.
+        long visitLimit = (long) sendBudget * CHUNK_VISITS_PER_SEND;
         LongOpenHashSet enqueue = requeueScratch;
         enqueue.clear();
         do {
-            triedSendChunkCount++;
+            visitedChunkCount++;
             long chunkHash = chunkSendQueue.dequeueLong();
             int chunkX = Level.getHashX(chunkHash);
             int chunkZ = Level.getHashZ(chunkHash);
@@ -259,6 +282,7 @@ public final class PlayerChunkManager {
                     chunkLoadingQueue.remove(chunkHash);
                     player.level.registerChunkLoader(player, chunkX, chunkZ, false);
                     chunkReadyToSend.enqueue(chunkHash);
+                    readiedChunkCount++;
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     chunkLoadingQueue.remove(chunkHash);
@@ -276,16 +300,27 @@ public final class PlayerChunkManager {
             } else {
                 enqueue.add(chunkHash);
             }
-        } while (!chunkSendQueue.isEmpty() && triedSendChunkCount < trySendChunkCountPerTick);
+        } while (!chunkSendQueue.isEmpty()
+                && readiedChunkCount < sendBudget
+                && visitedChunkCount < visitLimit);
         enqueue.forEach(chunkSendQueue::enqueue);
+    }
+
+    /**
+     * Tell the client which point its loaded chunks are centred on. Anything it holds outside that
+     * radius is dropped, and chunks sent for another centre are ignored, so this has to reach the
+     * client before the chunks it applies to.
+     */
+    private void sendViewPublisherUpdate() {
+        final NetworkChunkPublisherUpdatePacket packet = new NetworkChunkPublisherUpdatePacket();
+        packet.setNewPositionForView(Vector3i.from(player.getFloorX(), player.getFloorY(), player.getFloorZ()));
+        packet.setNewRadiusForView(player.getViewDistance() << 4);
+        player.sendPacket(packet);
     }
 
     private void sendChunk() {
         if (!chunkReadyToSend.isEmpty()) {
-            final NetworkChunkPublisherUpdatePacket packet = new NetworkChunkPublisherUpdatePacket();
-            packet.setNewPositionForView(Vector3i.from(player.getFloorX(), player.getFloorY(), player.getFloorZ()));
-            packet.setNewRadiusForView(player.getViewDistance() << 4);
-            player.sendPacket(packet);
+            sendViewPublisherUpdate();
             while (!chunkReadyToSend.isEmpty()) {
                 long chunkHash = chunkReadyToSend.dequeueLong();
                 if (!inRadiusChunks.contains(chunkHash)) {

@@ -3,7 +3,28 @@
     <Appenders>
         <TerminalConsole name="Console">
             <PatternLayout
-                    pattern="%cyan{%d{HH:mm:ss}} [%yellow{%t}] [%style{%highlight{%level}{STYLE=Logback}}] %minecraftFormatting{%msg}%n"/>
+                    pattern="%cyan{%d{HH:mm:ss}} [%yellow{%t}] [%style{%highlight{%level}{STYLE=Logback}}] %minecraftFormatting{%msg}%n">
+                <!--
+                    Hides player IP addresses from the screen: 51.83.42.7 is printed as 51.83.*, and
+                    2a01:cb08:8c5c:1a00::1 as 2a01:cb08:*. Applies to the whole rendered line, so it
+                    also covers stack traces and anything logged by netty or raknet. logs/server.log
+                    keeps the full addresses - add the same element to the File appender below to
+                    hide them there too.
+
+                    First branch, IPv4: skipped when the address is a wildcard, loopback, private,
+                    link-local or multicast one, so the bind address and a proxy on the same box stay
+                    readable. The surrounding lookarounds keep four-part version numbers out, as long
+                    as they carry a prefix such as the v of v1.4.0.0.
+
+                    Second branch, IPv6: skipped for unique local (fc/fd), multicast (ff) and
+                    link-local (fe8-feb) addresses. A match requires either a :: or eight groups,
+                    which is what keeps a duration like 12:34:56 or a MAC address from matching. A
+                    port written without brackets is swallowed along with the address.
+                -->
+                <replace
+                        regex="(?:(?&lt;![\w.])(?!0\.|10\.|127\.|169\.254\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|2(?:2[4-9]|[34]\d|5[0-5])\.)((?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.)(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?![\w.])|(?&lt;![\w:.])(?![fF][cCdD])(?![fF][fF])(?![fF][eE][89aAbB])(?=[\dA-Fa-f:]*::|(?:[\dA-Fa-f]{1,4}:){7})([\dA-Fa-f]{1,4}:[\dA-Fa-f]{1,4}:)[\dA-Fa-f:]+)"
+                        replacement="$1$2*"/>
+            </PatternLayout>
             <Filters>
                 <RegexFilter regex=".*Reading file /sys/class/net/.*" onMatch="DENY" onMismatch="ACCEPT"/>
             </Filters>
