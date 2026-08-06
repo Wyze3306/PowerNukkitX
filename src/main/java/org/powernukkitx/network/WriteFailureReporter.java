@@ -4,6 +4,7 @@ import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import org.cloudburstmc.protocol.bedrock.codec.PacketSerializeException;
 import org.powernukkitx.utils.FaultBarrier;
 
 /**
@@ -35,7 +36,20 @@ final class WriteFailureReporter extends ChannelDuplexHandler {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        if (isDecodeFailure(cause)) {
+            ctx.close();
+            return;
+        }
         // Not forwarded: netty's own tail handler would only restate it as "nobody handled this".
         FaultBarrier.report("handling a session channel event", ctx.channel().remoteAddress(), cause);
+    }
+
+    private static boolean isDecodeFailure(Throwable cause) {
+        for (Throwable t = cause; t != null; t = t.getCause()) {
+            if (t instanceof PacketSerializeException) {
+                return true;
+            }
+        }
+        return false;
     }
 }

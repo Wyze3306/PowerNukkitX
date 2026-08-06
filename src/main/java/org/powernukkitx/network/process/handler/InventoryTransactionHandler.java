@@ -124,7 +124,7 @@ public class InventoryTransactionHandler implements PacketHandler<InventoryTrans
         int c = item.getCount() - dropCount;
         if (c < 0) {
             player.getInventory().sendContents(player);
-            log.warn("cannot drop more items than the current amount!");
+            log.debug("cannot drop more items than the current amount!");
             return;
         }
 
@@ -161,6 +161,9 @@ public class InventoryTransactionHandler implements PacketHandler<InventoryTrans
         }
         Item item = player.getInventory().getItemInMainHand();
         if (type.equals(ItemUseOnActorActionType.INTERACT)) {
+            if (!player.canInteract(target, player.isCreative() ? 8 : 5)) {
+                return;
+            }
             PlayerInteractEntityEvent playerInteractEntityEvent = new PlayerInteractEntityEvent(player, target, item, Vector3.fromNetwork(transaction.getFromPosition()));
             if (player.isSpectator() || (player.getDataFlag(ActorFlags.SILENT) && !(target instanceof InventoryHolder)))
                 playerInteractEntityEvent.setCancelled();
@@ -213,7 +216,7 @@ public class InventoryTransactionHandler implements PacketHandler<InventoryTrans
                 if (event.isKick())
                     player.kick(PlayerKickEvent.Reason.INVALID_PVP, "Attempting to attack yourself");
 
-                log.warn("{} tried to attack oneself", player.getName());
+                log.debug("{} tried to attack oneself", player.getName());
                 return;
             }
             if (!player.canInteract(target, player.isCreative() ? 8 : 5)) {

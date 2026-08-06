@@ -84,10 +84,10 @@ public class ModalFormResponseHandler implements PacketHandler<ModalFormResponse
                         case ElementToggle toggle -> toggle.defaultValue((Boolean) res);
                         case ElementStepSlider stepSlider -> stepSlider.defaultStep(((ElementResponse) res)
                                 .elementId());
-                        default -> log.warn("Illegal element {} within ServerSettings", e);
+                        default -> log.debug("Illegal element {} within ServerSettings", e);
                     }
                 });
             }
-        } else log.warn("{} sent unknown form id {}", player.getName(), packet.getFormID());
+        } else log.debug("{} sent unknown form id {}", player.getName(), packet.getFormID());
     }
 }

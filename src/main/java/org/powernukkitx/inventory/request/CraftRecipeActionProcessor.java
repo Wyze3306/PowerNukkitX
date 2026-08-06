@@ -58,14 +58,14 @@ public class CraftRecipeActionProcessor implements ItemStackRequestActionProcess
         int count = input.getCount();
         int required = Math.max(recipeInput.getByte("Count") - subtract, 1);
         if (required > count || recipeInput.getShort("Damage") != damage || !recipeInput.getString("Name").equals(id)) {
-            log.error("The trade recipe does not match, expect {} actual {}, count {}", recipeInput, input, required);
+            log.debug("The trade recipe does not match, expect {} actual {}, count {}", recipeInput, input, required);
             return true;
         }
         if (recipeInput.containsCompound("tag")) {
             CompoundTag tag = recipeInput.getCompound("tag");
             CompoundTag compoundTag = input.getNbt();
             if (!tag.equals(compoundTag)) {
-                log.error("The trade recipe tag does not match tag, expect {} actual {}", tag, compoundTag);
+                log.debug("The trade recipe tag does not match tag, expect {} actual {}", tag, compoundTag);
                 return true;
             }
         }
@@ -78,13 +78,13 @@ public class CraftRecipeActionProcessor implements ItemStackRequestActionProcess
         if (action.getRecipeNetId().getRawId() >= EnchantmentHelper.ENCH_RECIPEID) {  //handle ench recipe
             EnchantmentHelper.ItemEnchantOptionWithEntry enchantOptionWithEntry = EnchantmentHelper.RECIPE_MAP.get(action.getRecipeNetId().getRawId());
             if (enchantOptionWithEntry == null) {
-                log.error("Can't find enchant recipe from netId {}", action.getRecipeNetId());
+                log.debug("Can't find enchant recipe from netId {}", action.getRecipeNetId());
                 return context.error();
             }
             final ItemEnchantOption enchantOptionData = enchantOptionWithEntry.getOption();
             Item first = inventory.getItem(0);
             if (first.isNull()) {
-                log.error("Can't find enchant input!");
+                log.debug("Can't find enchant input!");
                 return context.error();
             }
             Item item = first.clone().autoAssignStackNetworkId();
@@ -117,11 +117,11 @@ public class CraftRecipeActionProcessor implements ItemStackRequestActionProcess
         } else if (action.getRecipeNetId().getRawId() >= TradeRecipeBuildUtils.TRADE_RECIPEID) {//handle village trade recipe
             CompoundTag tradeRecipe = TradeRecipeBuildUtils.RECIPE_MAP.get(action.getRecipeNetId().getRawId());
             if (tradeRecipe == null) {
-                log.error("Can't find trade recipe from netId {}", action.getRecipeNetId());
+                log.debug("Can't find trade recipe from netId {}", action.getRecipeNetId());
                 return context.error();
             }
             if (action.getNumberOfRequestedCrafts() < 1) {
-                log.error("Invalid number of requested crafts {}", action.getNumberOfRequestedCrafts());
+                log.debug("Invalid number of requested crafts {}", action.getNumberOfRequestedCrafts());
                 return context.error();
             }
             Item first = inventory.getUnclonedItem(0);
@@ -133,7 +133,7 @@ public class CraftRecipeActionProcessor implements ItemStackRequestActionProcess
             }
             output.setCount(output.getCount() * action.getNumberOfRequestedCrafts());
             if (first.isNull() && second.isNull()) {
-                log.error("Can't find trade input!");
+                log.debug("Can't find trade input!");
                 return context.error();
             }
             boolean ca = tradeRecipe.contains("buyA");
@@ -144,40 +144,41 @@ public class CraftRecipeActionProcessor implements ItemStackRequestActionProcess
 
             if (ca && cb) {
                 if ((first.isNull() || second.isNull())) {
-                    log.error("Can't find trade input!");
+                    log.debug("Can't find trade input!");
                     return context.error();
                 } else {
                     if (checkTrade(tradeRecipe.getCompound("buyA"), first, reductionA)) return context.error();
                     if (checkTrade(tradeRecipe.getCompound("buyB"), second, reductionB)) return context.error();
                     if (tradeRecipe.getInt("uses") + action.getNumberOfRequestedCrafts() > tradeRecipe.getInt("maxUses"))
                         return context.error();
-                    player.getCreativeOutputInventory().setItem(output);
                 }
             } else if (ca) {
                 if (first.isNull()) {
-                    log.error("Can't find trade input!");
+                    log.debug("Can't find trade input!");
                     return context.error();
                 } else {
                     if (checkTrade(tradeRecipe.getCompound("buyA"), first, reductionA)) return context.error();
                     if (tradeRecipe.getInt("uses") + action.getNumberOfRequestedCrafts() > tradeRecipe.getInt("maxUses"))
                         return context.error();
-                    inventory.sendContents(player);
-                    player.getCreativeOutputInventory().setItem(output);
                 }
             }
             if (ca) {
                 int craftsN = action.getNumberOfRequestedCrafts();
                 int requiredA = Math.max(tradeRecipe.getCompound("buyA").getByte("Count") - reductionA, 1);
-                if (requiredA * craftsN > first.getCount()) {
+                if ((long) requiredA * craftsN > first.getCount()) {
                     return context.error();
                 }
                 int requiredB = 0;
                 if (cb) {
                     requiredB = Math.max(tradeRecipe.getCompound("buyB").getByte("Count") - reductionB, 1);
-                    if (requiredB * craftsN > second.getCount()) {
+                    if ((long) requiredB * craftsN > second.getCount()) {
                         return context.error();
                     }
                 }
+                if (!cb) {
+                    inventory.sendContents(player);
+                }
+                player.getCreativeOutputInventory().setItem(output);
                 inventory.decreaseCount(0, requiredA * craftsN);
                 if (cb) {
                     inventory.decreaseCount(1, requiredB * craftsN);
@@ -272,11 +273,11 @@ public class CraftRecipeActionProcessor implements ItemStackRequestActionProcess
     public ActionResponse handleSmithingUpgrade(SmithingTransformRecipe recipe, Player player, ItemStackRequestContext context) {
         Optional<Inventory> topWindow = player.getTopWindow();
         if (topWindow.isEmpty()) {
-            log.error("the player's haven't open any inventory!");
+            log.debug("the player's haven't open any inventory!");
             return context.error();
         }
         if (!(topWindow.get() instanceof SmithingInventory smithingInventory)) {
-            log.error("the player's haven't open smithing inventory! Instead {}", topWindow.get().getClass().getSimpleName());
+            log.debug("the player's haven't open smithing inventory! Instead {}", topWindow.get().getClass().getSimpleName());
             return context.error();
         }
         Item equipment = smithingInventory.getEquipment();
@@ -315,11 +316,11 @@ public class CraftRecipeActionProcessor implements ItemStackRequestActionProcess
     public ActionResponse handleSmithingTrim(Player player, ItemStackRequestContext context) {
         Optional<Inventory> topWindow = player.getTopWindow();
         if (topWindow.isEmpty()) {
-            log.error("the player's haven't open any inventory!");
+            log.debug("the player's haven't open any inventory!");
             return context.error();
         }
         if (!(topWindow.get() instanceof SmithingInventory smithingInventory)) {
-            log.error("the player's haven't open smithing inventory!");
+            log.debug("the player's haven't open smithing inventory!");
             return context.error();
         }
         Item equipment = smithingInventory.getEquipment();

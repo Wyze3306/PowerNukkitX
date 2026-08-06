@@ -32,11 +32,11 @@ public class CraftLoomActionProcessor implements ItemStackRequestActionProcessor
     public ActionResponse handle(CraftLoomAction action, Player player, ItemStackRequestContext context) {
         Optional<Inventory> topWindow = player.getTopWindow();
         if (topWindow.isEmpty()) {
-            log.error("the player's haven't open any inventory!");
+            log.debug("the player's haven't open any inventory!");
             return context.error();
         }
         if (!(topWindow.get() instanceof LoomInventory loomInventory)) {
-            log.error("the player's haven't open loom inventory!");
+            log.debug("the player's haven't open loom inventory!");
             return context.error();
         }
         Item banner = loomInventory.getBanner();

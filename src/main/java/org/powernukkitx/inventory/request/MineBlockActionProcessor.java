@@ -32,7 +32,7 @@ public class MineBlockActionProcessor implements ItemStackRequestActionProcessor
         HumanInventory inventory = player.getInventory();
         int heldItemIndex = inventory.getHeldItemIndex();
         if (heldItemIndex != action.getSlot()) {
-            log.warn("The held Item Index on the server side does not match the client side!");
+            log.debug("The held Item Index on the server side does not match the client side!");
             return context.error();
         }
 

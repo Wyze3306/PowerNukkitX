@@ -19,4 +19,8 @@ public interface PacketHandler<T extends BedrockPacket> {
     default boolean runsOnNetworkThread() {
         return false;
     }
+
+    default boolean requiresPlayer() {
+        return true;
+    }
 }

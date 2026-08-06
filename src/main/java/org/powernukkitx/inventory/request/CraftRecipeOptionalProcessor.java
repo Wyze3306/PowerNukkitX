@@ -43,7 +43,7 @@ public class CraftRecipeOptionalProcessor implements ItemStackRequestActionProce
     public ActionResponse handle(CraftRecipeOptionalAction action, Player player, ItemStackRequestContext context) {
         Optional<Inventory> topWindow = player.getTopWindow();
         if (topWindow.isEmpty()) {
-            log.error("the player's inventory is empty!");
+            log.debug("the player's inventory is empty!");
             return context.error();
         }
         ItemStackRequest itemStackRequest = context.getItemStackRequest();

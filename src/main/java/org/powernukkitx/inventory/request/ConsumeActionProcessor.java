@@ -51,7 +51,7 @@ public class ConsumeActionProcessor implements ItemStackRequestActionProcessor<C
     public ActionResponse handle(ConsumeAction action, Player player, ItemStackRequestContext context) {
         var count = action.getAmount();
         if (count == 0) {
-            log.warn("cannot consume 0 items!");
+            log.debug("cannot consume 0 items!");
 
             return context.error();
         }
@@ -82,19 +82,19 @@ public class ConsumeActionProcessor implements ItemStackRequestActionProcessor<C
             ));
         }
         if (validateStackNetworkId(item.getNetId(), action.getSource().getStackNetworkId())) {
-            log.warn("mismatch stack network id!");
+            log.debug("mismatch stack network id!");
 
             return context.error();
         }
 
         if (item.isNull()) {
-            log.warn("cannot consume an air!");
+            log.debug("cannot consume an air!");
 
             return context.error();
         }
 
         if (item.getCount() < count) {
-            log.warn("cannot consume more items than the current amount!");
+            log.debug("cannot consume more items than the current amount!");
 
             return context.error();
         }

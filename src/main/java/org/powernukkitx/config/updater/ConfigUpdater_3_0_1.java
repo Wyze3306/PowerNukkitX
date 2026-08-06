@@ -18,7 +18,7 @@ public class ConfigUpdater_3_0_1 implements ConfigUpdater.Updater {
         RawConfigView view = new RawConfigView(server.getSettings());
 
         // The transport is selectable now, so its options moved under the section that owns them.
-        for (String key : new String[]{"autoFlush", "flushInterval", "maxQueuedBytes", "cookieMode", "packetLimit"}) {
+        for (String key : new String[]{"autoFlush", "flushInterval", "maxQueuedBytes", "cookieMode", "packetLimit", "globalPacketLimit"}) {
             renameKey(view, "network-settings." + key, "network-settings.raknet." + key);
         }
 
