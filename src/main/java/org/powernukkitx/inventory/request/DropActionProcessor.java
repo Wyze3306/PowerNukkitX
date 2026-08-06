@@ -44,15 +44,15 @@ public class DropActionProcessor implements ItemStackRequestActionProcessor<Drop
         }
 
         if (validateStackNetworkId(item.getNetId(), action.getSource().getStackNetworkId())) {
-            log.warn("mismatch stack network id!");
+            log.debug("mismatch stack network id!");
             return context.error();
         }
         if (item.isNull()) {
-            log.warn("cannot throw an air!");
+            log.debug("cannot throw an air!");
             return context.error();
         }
         if (item.getCount() < count) {
-            log.warn("cannot throw more items than the current amount!");
+            log.debug("cannot throw more items than the current amount!");
             return context.error();
         }
         Item drop = item.clone();

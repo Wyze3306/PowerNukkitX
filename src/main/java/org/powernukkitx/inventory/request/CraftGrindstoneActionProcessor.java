@@ -38,7 +38,7 @@ public class CraftGrindstoneActionProcessor implements ItemStackRequestActionPro
     public ActionResponse handle(CraftGrindstoneAction action, Player player, ItemStackRequestContext context) {
         Optional<Inventory> topWindow = player.getTopWindow();
         if (topWindow.isEmpty()) {
-            log.error("the player's inventory is empty!");
+            log.debug("the player's inventory is empty!");
             return context.error();
         }
         GrindstoneInventory inventory = (GrindstoneInventory) topWindow.get();

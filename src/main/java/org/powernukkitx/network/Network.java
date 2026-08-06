@@ -142,6 +142,7 @@ public class Network implements NetworkInterface {
             .option(RakChannelOption.RAK_ADVERTISEMENT, getAdvertisement())
             .option(RakChannelOption.RAK_SUPPORTED_PROTOCOLS, new int[]{codec.getRaknetProtocolVersion()})
             .option(RakChannelOption.RAK_PACKET_LIMIT, net.packetLimit())
+            .option(RakChannelOption.RAK_GLOBAL_PACKET_LIMIT, net.globalPacketLimit())
             .option(RakChannelOption.RAK_SERVER_COOKIE_MODE, parseCookieMode(net.cookieMode()))
             .childOption(RakChannelOption.RAK_AUTO_FLUSH, net.autoFlush())
             .childOption(RakChannelOption.RAK_FLUSH_INTERVAL, net.flushInterval())
@@ -186,7 +187,13 @@ public class Network implements NetworkInterface {
                         ));
                         final Channel sessionChannel = session.getPeer().getChannel();
                         Network.this.sessionMap.put(address, session);
+                        if (Network.this.botnetDetector != null) {
+                            Network.this.botnetDetector.registerSession(address);
+                        }
                         sessionChannel.closeFuture().addListener(future -> {
+                            if (Network.this.botnetDetector != null) {
+                                Network.this.botnetDetector.unregisterSession(address);
+                            }
                             if (!Network.this.sessionMap.remove(address, session)) {
                                 Network.this.sessionMap.values().remove(session);
                             }
@@ -356,8 +363,19 @@ public class Network implements NetworkInterface {
      * whether the address is blocked
      */
     public boolean isAddressBlocked(InetSocketAddress address) {
-        LocalDateTime until = this.blockIpMap.get(address.getAddress());
-        return until != null && LocalDateTime.now().isBefore(until);
+        InetAddress inetAddress = address.getAddress();
+        if (inetAddress == null) {
+            return false;
+        }
+        LocalDateTime until = this.blockIpMap.get(inetAddress);
+        if (until == null) {
+            return false;
+        }
+        if (LocalDateTime.now().isBefore(until)) {
+            return true;
+        }
+        this.blockIpMap.remove(inetAddress, until);
+        return false;
     }
 
     /**
@@ -371,9 +389,9 @@ public class Network implements NetworkInterface {
                     report, bns.autoBlock(), bns.autoBlockDurationSeconds());
                 server.getPluginManager().callEvent(event);
                 if (event.isAutoBlock()) {
-                    int durationMs = event.getBlockDurationSeconds() * 1000;
+                    long durationMs = Math.min((long) event.getBlockDurationSeconds() * 1000L, Integer.MAX_VALUE);
                     for (var ip : event.getSuspiciousAddresses()) {
-                        blockAddress(ip, durationMs);
+                        blockAddress(ip, (int) durationMs);
                     }
                 }
             });
