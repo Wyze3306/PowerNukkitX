@@ -26,14 +26,28 @@ public final class PlayerFixture {
     private PlayerFixture() {
     }
 
+    public static synchronized TestPlayer get() {
+        if (player == null) {
+            player = create();
+        }
+        return player;
+    }
+
+    /**
+     * A player nobody else holds a reference to. Tests that leave a mark on the player they use -
+     * an open window, teleport bookkeeping, loaded chunks, a level switch - need this instead of
+     * {@link #get()}: the shared player outlives the test class and carries that state into
+     * whatever else runs in the same JVM fork.
+     */
+    public static synchronized TestPlayer newPlayer() {
+        return create();
+    }
+
     // Cloudburst's IdentityData/IdentityClaims have package-private constructors and no
     // public factory, so reflection is the only way to build a test identity without a
     // real network login. This is intentional test-only scaffolding.
     @SuppressWarnings("PMD.AvoidAccessibilityAlteration")
-    public static synchronized TestPlayer get() {
-        if (player != null) {
-            return player;
-        }
+    private static TestPlayer create() {
         ServerMockFixture.boot();
         try {
             Class<?> idDataClass = Class.forName("org.cloudburstmc.protocol.bedrock.util.ChainValidationResult$IdentityData");
@@ -59,11 +73,11 @@ public final class PlayerFixture {
             doNothing().when(session).sendPacket(any());
             doNothing().when(session).sendPacketImmediately(any());
 
-            player = new TestPlayer(session, info);
-            player.setLevel(ServerMockFixture.level);
+            TestPlayer created = new TestPlayer(session, info);
+            created.setLevel(ServerMockFixture.level);
             // Normally set by Entity#init, which the fixture player never goes through.
-            player.temporalVector = new Vector3();
-            return player;
+            created.temporalVector = new Vector3();
+            return created;
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }

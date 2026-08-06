@@ -73,7 +73,7 @@ public interface CustomBlock {
         CompoundTag comp = this.getDefinition().nbt().getCompound("components");
         if (comp.contains("minecraft:destructible_by_mining")) {
             var clientBreakTime = comp.getCompound("minecraft:destructible_by_mining").getFloat("value");
-            if (player != null) {
+            if (player != null && !player.isFlying()) {
                 if (player.getLevel().getTick() - player.getLastInAirTick() < 5) {
                     clientBreakTime *= 6;
                 }
