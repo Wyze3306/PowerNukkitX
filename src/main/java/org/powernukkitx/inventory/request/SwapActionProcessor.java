@@ -45,11 +45,11 @@ public class SwapActionProcessor implements ItemStackRequestActionProcessor<Swap
         var sourceItem = source.getItem(sourceSlot);
         var destinationItem = destination.getItem(destinationSlot);
         if (validateStackNetworkId(sourceItem.getNetId(), action.getSource().getStackNetworkId())) {
-            log.debug("mismatch stack network id!");
+            log.warn("mismatch stack network id!");
             return context.error();
         }
         if (validateStackNetworkId(destinationItem.getNetId(), action.getDestination().getStackNetworkId())) {
-            log.debug("mismatch stack network id!");
+            log.warn("mismatch stack network id!");
             return context.error();
         }
         source.setItem(sourceSlot, destinationItem, false);

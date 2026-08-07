@@ -32,12 +32,12 @@ public class CraftResultDeprecatedActionProcessor implements ItemStackRequestAct
     public ActionResponse handle(CraftResultsDeprecatedAction action, Player player, ItemStackRequestContext context) {
         if (context.has(RECIPE_DATA_KEY) && ((Recipe) context.get(RECIPE_DATA_KEY)).getType() == RecipeType.MULTI) {
             if (action.getResultItemsDeprecated().length == 0) {
-                log.debug("Multi recipe result is missing!");
+                log.warn("Multi recipe result is missing!");
                 return context.error();
             }
             Item resultItem = Item.fromNetwork(action.getResultItemsDeprecated()[0]);
             if (resultItem.isNull() || resultItem.getCount() <= 0 || resultItem.getCount() > resultItem.getMaxStackSize()) {
-                log.debug("Invalid multi recipe result {}!", resultItem);
+                log.warn("Invalid multi recipe result {}!", resultItem);
                 return context.error();
             }
             if (!validateResultAgainstInput(player, resultItem)) {
@@ -73,11 +73,11 @@ public class CraftResultDeprecatedActionProcessor implements ItemStackRequestAct
             }
         }
         if (matchingInputCount == 0) {
-            log.debug("Multi recipe result {} does not match any crafting input!", resultItem);
+            log.warn("Multi recipe result {} does not match any crafting input!", resultItem);
             return false;
         }
         if (resultItem.getCount() > totalInputCount) {
-            log.debug("Multi recipe result count {} exceeds crafting input count {}!", resultItem.getCount(), totalInputCount);
+            log.warn("Multi recipe result count {} exceeds crafting input count {}!", resultItem.getCount(), totalInputCount);
             return false;
         }
         if (resultItem.hasEnchantments()) {
@@ -91,7 +91,7 @@ public class CraftResultDeprecatedActionProcessor implements ItemStackRequestAct
                     }
                 }
                 if (!backedByInput) {
-                    log.debug("Multi recipe result {} carries enchantment {} lvl {} not present on any crafting input!", resultItem, ench.getId(), ench.getLevel());
+                    log.warn("Multi recipe result {} carries enchantment {} lvl {} not present on any crafting input!", resultItem, ench.getId(), ench.getLevel());
                     return false;
                 }
             }

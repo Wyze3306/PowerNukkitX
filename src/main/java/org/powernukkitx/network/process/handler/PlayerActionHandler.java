@@ -129,7 +129,7 @@ public class PlayerActionHandler implements PacketHandler<PlayerActionPacket> {
             case PlayerActionType.START_ITEM_USE_ON, PlayerActionType.STOP_ITEM_USE_ON -> {
                 // TODO
             }
-            default -> log.debug("{} sent invalid action id {}", player.getName(), packet.getAction());
+            default -> log.warn("{} sent invalid action id {}", player.getName(), packet.getAction());
         }
     }
 }

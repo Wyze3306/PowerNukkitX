@@ -42,22 +42,22 @@ public class DestroyActionProcessor implements ItemStackRequestActionProcessor<D
         ContainerEnumName container = containerName.getContainerName();
         var sourceInventory = NetworkMapping.getInventory(player, container, dynamicId);
         if (player.getGamemode() != Player.CREATIVE && !(sourceInventory instanceof BeaconInventory)) {
-            log.debug("only creative mode can destroy item");
+            log.warn("only creative mode can destroy item");
             return context.error();
         }
         var count = action.getAmount();
         var slot = sourceInventory.fromNetworkSlot(action.getSource().getSlot());
         var item = sourceInventory.getItem(slot);
         if (validateStackNetworkId(item.getNetId(), action.getSource().getStackNetworkId())) {
-            log.debug("mismatch stack network id!");
+            log.warn("mismatch stack network id!");
             return context.error();
         }
         if (item.isNull()) {
-            log.debug("cannot destroy an air!");
+            log.warn("cannot destroy an air!");
             return context.error();
         }
         if (item.getCount() < count) {
-            log.debug("cannot destroy more items than the current amount!");
+            log.warn("cannot destroy more items than the current amount!");
             return context.error();
         }
         if (item.getCount() > count) {

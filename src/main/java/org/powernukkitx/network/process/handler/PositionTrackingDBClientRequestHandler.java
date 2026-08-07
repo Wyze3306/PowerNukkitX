@@ -28,7 +28,7 @@ public class PositionTrackingDBClientRequestHandler implements PacketHandler<Pos
                 return;
             }
         } catch (IOException e) {
-            log.debug("Failed to track the trackingHandler {}", packet.getTrackingId(), e);
+            log.warn("Failed to track the trackingHandler {}", packet.getTrackingId(), e);
         }
         PositionTrackingDBServerBroadcastPacket notFound = new PositionTrackingDBServerBroadcastPacket();
         notFound.setAction(PositionTrackingDBServerBroadcastPacket.Action.NOT_FOUND);

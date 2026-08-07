@@ -34,7 +34,7 @@ public class PlayerSkinHandler implements PacketHandler<PlayerSkinPacket> {
         }
 
         if (!SkinUtils.isValid(skin.getSkin())) {
-            log.debug("{}: PlayerSkinPacket with invalid skin", playerHandle.getUsername());
+            log.warn("{}: PlayerSkinPacket with invalid skin", playerHandle.getUsername());
             return;
         }
 
@@ -42,7 +42,7 @@ public class PlayerSkinHandler implements PacketHandler<PlayerSkinPacket> {
         var tooQuick = TimeUnit.SECONDS.toMillis(player.getServer().getSettings().playerSettings().skinChangeCooldown()) > System.currentTimeMillis() - player.lastSkinChange;
         if (tooQuick) {
             playerChangeSkinEvent.setCancelled(true);
-            log.debug("Player {} change skin too quick!", playerHandle.getUsername());
+            log.warn("Player {} change skin too quick!", playerHandle.getUsername());
         }
         player.getServer().getPluginManager().callEvent(playerChangeSkinEvent);
         if (!playerChangeSkinEvent.isCancelled()) {

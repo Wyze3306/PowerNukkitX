@@ -69,7 +69,7 @@ public class CraftRecipeAutoProcessor implements ItemStackRequestActionProcessor
 
         boolean matched = success == action.getIngredients().size();
         if (!matched) {
-            log.debug("Mismatched recipe! Network id: {},Recipe name: {},Recipe type: {}", action.getRecipeNetId(), recipe.getRecipeId(), recipe.getType());
+            log.warn("Mismatched recipe! Network id: {},Recipe name: {},Recipe type: {}", action.getRecipeNetId(), recipe.getRecipeId(), recipe.getType());
             return context.error();
         } else {
             context.put(RECIPE_DATA_KEY, recipe);
@@ -83,7 +83,7 @@ public class CraftRecipeAutoProcessor implements ItemStackRequestActionProcessor
                 }
             }
             if (consumeActions.size() < consumeActionCountNeeded) {
-                log.debug("Mismatched consume action count! Expected: {}, Actual: {}", consumeActionCountNeeded, consumeActions.size());
+                log.warn("Mismatched consume action count! Expected: {}, Actual: {}", consumeActionCountNeeded, consumeActions.size());
                 return context.error();
             }
 

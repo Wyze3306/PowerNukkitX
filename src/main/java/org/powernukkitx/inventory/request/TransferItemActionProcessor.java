@@ -49,12 +49,12 @@ public abstract class TransferItemActionProcessor<T extends TransferItemStackReq
         }
         if (sourItem.isUsingNetId()) {
             if (validateStackNetworkId(sourItem.getNetId(), sourceStackNetworkId)) {
-                log.debug("mismatch source stack network id!");
+                log.warn("mismatch source stack network id!");
                 return context.error();
             }
         }
         if (sourItem.getCount() < count) {
-            log.debug("transfer an item that has not enough count is not allowed. Expected: {}, Actual: {}", sourItem.getCount(), count);
+            log.warn("transfer an item that has not enough count is not allowed. Expected: {}, Actual: {}", sourItem.getCount(), count);
             return context.error();
         }
 
@@ -85,15 +85,15 @@ public abstract class TransferItemActionProcessor<T extends TransferItemStackReq
 
         var destItem = destination.getUnclonedItem(destinationSlot);
         if (!destItem.isNull() && !destItem.equals(sourItem, true, true)) {
-            log.debug("transfer an item to a slot that has a different item is not allowed");
+            log.warn("transfer an item to a slot that has a different item is not allowed");
             return context.error();
         }
         if (validateStackNetworkId(destItem.getNetId(), destinationStackNetworkId)) {
-            log.debug("mismatch destination stack network id!");
+            log.warn("mismatch destination stack network id!");
             return context.error();
         }
         if (destItem.getCount() + count > destItem.getMaxStackSize()) {
-            log.debug("destination stack size bigger than the max stack size!");
+            log.warn("destination stack size bigger than the max stack size!");
             return context.error();
         }
 
