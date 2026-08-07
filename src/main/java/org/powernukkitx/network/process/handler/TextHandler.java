@@ -29,7 +29,7 @@ public class TextHandler implements PacketHandler<TextPacket> {
 
         boolean isXboxAuth = Server.getInstance().getSettings().baseSettings().xboxAuth();
         if (isXboxAuth && !packet.getSendersXUID().equals(playerHandle.player.getXUID())) {
-            log.debug("{} sent TextPacket with invalid xuid : {} != {}", playerHandle.getUsername(), packet.getSendersXUID(), holder.getPlayer().getXUID());
+            log.warn("{} sent TextPacket with invalid xuid : {} != {}", playerHandle.getUsername(), packet.getSendersXUID(), holder.getPlayer().getXUID());
             return;
         }
 

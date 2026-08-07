@@ -46,7 +46,7 @@ public class InteractHandler implements PacketHandler<InteractPacket> {
             if(event.isKick())
                 player.kick(PlayerKickEvent.Reason.INVALID_PVE, "Attempting to interact with an invalid entity");
 
-            log.debug(player.getServer().getLanguage().tr("nukkit.player.invalidEntity", player.getName()));
+            log.warn(player.getServer().getLanguage().tr("nukkit.player.invalidEntity", player.getName()));
             return;
         }
 
@@ -81,7 +81,7 @@ public class InteractHandler implements PacketHandler<InteractPacket> {
                 } else {
                     player.forceClientCloseInventory();
                     player.setInventoryOpen(false);
-                    log.debug("{} tried to open the inventory while still being open!", player.getName());
+                    log.warn("{} tried to open the inventory while still being open!", player.getName());
                 }
             }
         }

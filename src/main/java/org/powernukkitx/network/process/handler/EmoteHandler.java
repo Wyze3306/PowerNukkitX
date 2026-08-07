@@ -26,11 +26,11 @@ public class EmoteHandler implements PacketHandler<EmotePacket> {
             return;
         }
         if (packet.getActorRuntimeId() != playerHandle.player.getId()) {
-            log.debug("{} sent EmotePacket with invalid entity id: {} != {}", playerHandle.getUsername(), packet.getActorRuntimeId(), playerHandle.player.getId());
+            log.warn("{} sent EmotePacket with invalid entity id: {} != {}", playerHandle.getUsername(), packet.getActorRuntimeId(), playerHandle.player.getId());
             return;
         }
         if (!UUIDValidator.isValidUUID(packet.getEmoteId())) {
-            log.debug("{} sent EmotePacket with invalid emoteId: {}", playerHandle.getUsername(), packet.getEmoteId());
+            log.warn("{} sent EmotePacket with invalid emoteId: {}", playerHandle.getUsername(), packet.getEmoteId());
             return;
         }
 

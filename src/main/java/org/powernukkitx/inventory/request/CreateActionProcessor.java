@@ -28,12 +28,12 @@ public class CreateActionProcessor implements ItemStackRequestActionProcessor<Cr
     public ActionResponse handle(CreateAction action, Player player, ItemStackRequestContext context) {
         Optional<ItemStackRequestAction> itemStackRequestAction = Arrays.stream(context.getItemStackRequest().getActions()).filter(action1 -> action1 instanceof CraftRecipeAction).findFirst();
         if (itemStackRequestAction.isEmpty()) {
-            log.debug("Recipe not found in ItemStackRequest Context! Context: {}", context);
+            log.warn("Recipe not found in ItemStackRequest Context! Context: {}", context);
             return context.error();
         }
         Recipe recipe = Registries.RECIPE.getRecipeByNetworkId(((CraftRecipeAction) itemStackRequestAction.get()).getRecipeNetId().getRawId());
         if (recipe == null) {
-            log.debug("Recipe with network id {} not found! ItemStackRequest: {}", ((CraftRecipeAction) itemStackRequestAction.get()).getRecipeNetId().getRawId(), context.getItemStackRequest());
+            log.warn("Recipe with network id {} not found! ItemStackRequest: {}", ((CraftRecipeAction) itemStackRequestAction.get()).getRecipeNetId().getRawId(), context.getItemStackRequest());
             return context.error();
         }
         var output = recipe.getResults().get(action.getResultsIndex());

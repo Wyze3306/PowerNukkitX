@@ -32,16 +32,16 @@ public class BeaconPaymentActionProcessor implements ItemStackRequestActionProce
     public ActionResponse handle(BeaconPaymentAction action, Player player, ItemStackRequestContext context) {
         Optional<Inventory> topWindow = player.getTopWindow();
         if (topWindow.isEmpty()) {
-            log.debug("the player's haven't open any inventory!");
+            log.error("the player's haven't open any inventory!");
             return context.error();
         }
         if (!(topWindow.get() instanceof BeaconInventory beaconInventory)) {
-            log.debug("the player's haven't open beacon inventory!");
+            log.error("the player's haven't open beacon inventory!");
             return context.error();
         }
         Item payment = beaconInventory.getItem(0);
         if (payment.isNull() || !VALID_PAYMENT_ITEMS.contains(payment.getId())) {
-            log.debug("invalid beacon payment item {}!", payment);
+            log.warn("invalid beacon payment item {}!", payment);
             return context.error();
         }
         BlockEntityBeacon holder = beaconInventory.getHolder();
@@ -49,11 +49,11 @@ public class BeaconPaymentActionProcessor implements ItemStackRequestActionProce
         int primary = action.getPrimaryEffectId();
         int secondary = action.getSecondaryEffectId();
         if (!BlockEntityBeacon.isPrimaryAllowed(primary, powerLevel)) {
-            log.debug("beacon primary effect {} is not allowed for power level {}!", primary, powerLevel);
+            log.warn("beacon primary effect {} is not allowed for power level {}!", primary, powerLevel);
             return context.error();
         }
         if (secondary != 0 && secondary != primary && secondary != EffectType.REGENERATION.id()) {
-            log.debug("invalid beacon secondary effect {}!", secondary);
+            log.warn("invalid beacon secondary effect {}!", secondary);
             return context.error();
         }
         boolean paymentConsumed = false;
@@ -74,7 +74,7 @@ public class BeaconPaymentActionProcessor implements ItemStackRequestActionProce
             }
         }
         if (!paymentConsumed) {
-            log.debug("{}: beacon activated without consuming payment!", player.getName());
+            log.warn("{}: beacon activated without consuming payment!", player.getName());
             return context.error();
         }
         holder.setPrimaryPower(primary);
