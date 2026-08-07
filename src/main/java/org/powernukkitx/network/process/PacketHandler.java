@@ -20,6 +20,12 @@ public interface PacketHandler<T extends BedrockPacket> {
         return false;
     }
 
+    /**
+     * When {@code true} the packet is dropped until the session has created its
+     * {@link org.powernukkitx.Player}. Until then a handler runs inline on the Netty thread, so its
+     * code is reachable by a client that has not authenticated yet. Only the login sequence
+     * handlers, which must run before the player exists, should return {@code false}.
+     */
     default boolean requiresPlayer() {
         return true;
     }
