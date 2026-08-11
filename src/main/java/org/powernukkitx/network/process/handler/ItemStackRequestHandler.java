@@ -94,6 +94,7 @@ public class ItemStackRequestHandler implements PacketHandler<ItemStackRequestPa
 
             boolean failed = false;
             boolean desynced = false;
+            boolean refused = false;
             try {
                 for (int index = 0; index < actions.length; index++) {
                     ItemStackRequestAction action = actions[index];
@@ -137,6 +138,7 @@ public class ItemStackRequestHandler implements PacketHandler<ItemStackRequestPa
                             // later request is refused for the same stale reason, and only
                             // a relog fixes it. A plugin refusal (a menu cancelling clicks)
                             // has nothing to resync.
+                            refused = true;
                             desynced = !refusedByPlugin;
                             break;
                         }
@@ -171,7 +173,13 @@ public class ItemStackRequestHandler implements PacketHandler<ItemStackRequestPa
                 player.sendAllInventories();
             }
 
-            if (failed) {
+            // The refusal already queued an ERROR for this request id. Falling
+            // through would queue itemStackResponse too, which still carries
+            // SUCCESS and the same id: the client sees its action confirmed,
+            // keeps the state it predicted instead of rolling back, and from
+            // then on every request on that slot is refused for a stack net id
+            // the server never had — resent in a loop until the player relogs.
+            if (failed || refused) {
                 continue;
             }
 
