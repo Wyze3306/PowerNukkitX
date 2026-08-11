@@ -282,6 +282,7 @@ public class LoginHandler implements PacketHandler<LoginPacket> {
 
     private ClientJwtValidationResult validateClientJwt(String clientJwt, PublicKey identityPublicKey) {
         if (clientJwt == null || clientJwt.isEmpty()) {
+            log.debug("Rejected a login without a client JWT");
             return ClientJwtValidationResult.INVALID;
         }
         try {
@@ -292,10 +293,17 @@ public class LoginHandler implements PacketHandler<LoginPacket> {
             final JwtClaims claims = ctx.getJwtClaims();
             final ClientChainData clientChainData = ClientChainData.from(claims);
             if (clientChainData == null) {
+                log.debug("Rejected a login whose client JWT carries no usable chain data");
                 return ClientJwtValidationResult.INVALID;
             }
             final Skin skin = ClientSkinData.readSkin(claims);
-            if (skin == null || !SkinUtils.isValid(skin)) {
+            if (skin == null) {
+                // Nothing to fall back on: Player#setSkin dereferences this on spawn.
+                log.debug("Rejected a login whose client JWT carries no skin");
+                return ClientJwtValidationResult.INVALID;
+            }
+            if (!SkinUtils.isValid(skin)) {
+                log.debug("Rejected a login whose skin failed validation");
                 return ClientJwtValidationResult.INVALID;
             }
             return new ClientJwtValidationResult(
@@ -303,7 +311,9 @@ public class LoginHandler implements PacketHandler<LoginPacket> {
                 clientChainData,
                 skin
             );
-        } catch (InvalidJwtException ignored) {}
+        } catch (InvalidJwtException e) {
+            log.debug("Rejected a login whose client JWT could not be verified", e);
+        }
         return ClientJwtValidationResult.INVALID;
     }
 
