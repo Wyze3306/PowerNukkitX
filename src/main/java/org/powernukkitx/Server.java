@@ -2701,6 +2701,41 @@ public class Server {
     }
 
     /**
+     * Drops from a level's generator map the dimensions turned off by allow-nether and
+     * allow-the-end. Those settings were read into the server but never consulted, so every
+     * world still brought up its nether and its end: three levels generated, ticked and kept
+     * in memory for a server that wants one.
+     * <p>
+     * The config.json on disk is left untouched, so turning a dimension back on restores it -
+     * this only decides what is generated and loaded for this run. A world that declares no
+     * other dimension is kept whole: dropping its only generator would load nothing at all,
+     * and for the default world that leaves the server without a spawn level.
+     *
+     * @param levelConfig the level config to filter
+     * @return the generators to actually load, never empty
+     */
+    private Map<Integer, LevelConfig.GeneratorConfig> enabledGenerators(LevelConfig levelConfig) {
+        final Map<Integer, LevelConfig.GeneratorConfig> generators = levelConfig.generators();
+        if ((this.allowNether && this.allowTheEnd) || generators == null || generators.isEmpty()) {
+            return generators;
+        }
+
+        final Map<Integer, LevelConfig.GeneratorConfig> enabled = new LinkedHashMap<>(generators);
+        if (!this.allowNether) {
+            enabled.remove(Level.DIMENSION_NETHER);
+        }
+        if (!this.allowTheEnd) {
+            enabled.remove(Level.DIMENSION_THE_END);
+        }
+
+        if (enabled.isEmpty()) {
+            log.warn("Every dimension of this level is disabled by allow-nether/allow-the-end, loading it unchanged");
+            return generators;
+        }
+        return enabled;
+    }
+
+    /**
      * Loads the selected level by its folder name
      *
      * @param levelFolderName the level folder name
@@ -2724,7 +2759,7 @@ public class Server {
             provider = LevelProviderManager.getProviderFactoryByName(levelConfig.format());
         }
 
-        Map<Integer, LevelConfig.GeneratorConfig> generators = levelConfig.generators();
+        Map<Integer, LevelConfig.GeneratorConfig> generators = enabledGenerators(levelConfig);
         for (var entry : generators.entrySet()) {
             String levelName = levelFolderName
                 + (generators.size() > 1 ? entry.getValue().dimensionData().getSuffix() : "");
@@ -2799,7 +2834,10 @@ public class Server {
             log.error("Could not load level " + name, new LevelException("Level config is not a valid"));
             return false;
         }
-        for (var entry : levelConfig.generators().entrySet()) {
+        // config.json above keeps every dimension the world declares; only the enabled ones
+        // are actually generated, so a disabled nether never gets written to disk either.
+        Map<Integer, LevelConfig.GeneratorConfig> generators = enabledGenerators(levelConfig);
+        for (var entry : generators.entrySet()) {
             LevelConfig.GeneratorConfig generatorConfig = entry.getValue();
             var provider = LevelProviderManager.getProviderFactoryByName(levelConfig.format());
             if (provider == null) {
@@ -2811,12 +2849,12 @@ public class Server {
             try {
                 provider.generate(path, name, generatorConfig);
                 String levelName = name
-                    + (levelConfig.generators().size() > 1 ? entry.getValue().dimensionData().getSuffix() : "");
+                    + (generators.size() > 1 ? entry.getValue().dimensionData().getSuffix() : "");
                 if (this.isLevelLoaded(levelName)) {
                     log.warn("level {} has already been loaded!", levelName);
                     continue;
                 }
-                level = new Level(this, levelName, path, levelConfig.generators().size(), provider, generatorConfig);
+                level = new Level(this, levelName, path, generators.size(), provider, generatorConfig);
 
                 this.getLevels().put(level.getId(), level);
                 level.initLevel();
