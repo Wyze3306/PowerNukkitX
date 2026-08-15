@@ -8,6 +8,7 @@ import org.powernukkitx.Player;
 
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -30,7 +31,20 @@ public final class PacketTrace {
     /**
      * How many entries are kept per traced player. A burst of identical packets counts as one.
      */
-    public static final int CAPACITY = 48;
+    public static final int CAPACITY = 192;
+
+    /**
+     * Packets a level emits continuously, each with a position of its own. Folding these on type
+     * alone loses nothing - one portal keeps a client's window full of particle events and pushes
+     * out the packet the trace was armed to find.
+     */
+    private static final Set<String> CHATTY = Set.of(
+        "LevelEventPacket",
+        "LevelEventGenericPacket",
+        "MoveActorDeltaPacket",
+        "MoveActorAbsolutePacket",
+        "SetActorMotionPacket",
+        "UpdateBlockPacket");
 
     private static final int SUMMARY_LIMIT = 300;
     private static final Map<String, PacketTrace> TRACES = new ConcurrentHashMap<>();
@@ -110,8 +124,16 @@ public final class PacketTrace {
             // A single effect or movement routine can emit hundreds of identical packets in one
             // tick. Counting a run as one entry keeps the window wide enough to still show what
             // else was on the wire, which is the whole point of the trace.
+            //
+            // The summary has to match too, not just the type: a scoreboard redraw sends a dozen
+            // SetScorePackets in one tick that differ only in their payload, and folding them on
+            // type alone hides every one of them behind the first - which is exactly the field
+            // you need when hunting the packet a client choked on. The exception is the chatty
+            // effect packets, which are all distinct and would otherwise be the only thing left
+            // in the window.
             final int last = (trace.next - 1 + CAPACITY) % CAPACITY;
-            if (trace.recorded > 0 && type.equals(trace.types[last]) && trace.ticks[last] == tick) {
+            if (trace.recorded > 0 && type.equals(trace.types[last]) && trace.ticks[last] == tick
+                && (summary.equals(trace.summaries[last]) || CHATTY.contains(type))) {
                 trace.repeats[last]++;
                 return;
             }
