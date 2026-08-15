@@ -10,7 +10,6 @@ import org.powernukkitx.event.player.PlayerTeleportEvent.TeleportCause;
 import org.powernukkitx.level.GameRule;
 import org.powernukkitx.level.Position;
 import org.powernukkitx.level.format.IChunk;
-import org.powernukkitx.math.AxisAlignedBB;
 import org.powernukkitx.math.NukkitMath;
 import org.powernukkitx.math.SimpleAxisAlignedBB;
 import org.powernukkitx.math.Vector3;
@@ -179,13 +178,15 @@ public class EntityEnderPearl extends EntityProjectile {
     }
 
     /**
-     * Whether the owner's own bounding box, put down feet first at the given position, is clear of
-     * the blocks around it.
+     * Whether the owner, put down feet first at the given position, is clear of the blocks around
+     * it. Measured on the box they stand in, not the one they are in right now: a crouched player
+     * fits under an overhang they cannot stand up in, and they do stand up.
      */
     private boolean fitsAt(double x, double y, double z) {
-        final AxisAlignedBB owner = this.shootingEntity.getBoundingBox();
-        final double halfWidth = (owner.getMaxX() - owner.getMinX()) / 2 - CONTACT_TOLERANCE;
-        final double height = owner.getMaxY() - owner.getMinY() - CONTACT_TOLERANCE;
+        final Entity owner = this.shootingEntity;
+        final float scale = owner.getScale();
+        final double halfWidth = owner.getWidth() * scale / 2 - CONTACT_TOLERANCE;
+        final double height = owner.getHeight() * scale - CONTACT_TOLERANCE;
 
         return !this.level.hasCollision(this.shootingEntity, new SimpleAxisAlignedBB(
             x - halfWidth, y + CONTACT_TOLERANCE, z - halfWidth,
