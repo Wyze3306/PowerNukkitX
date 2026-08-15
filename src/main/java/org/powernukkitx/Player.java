@@ -3485,6 +3485,11 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
                 this.addMotion(this.motionX, this.motionY, this.motionZ);  // Send it to others
                 final SetActorMotionPacket packet = new SetActorMotionPacket();
                 packet.setTargetRuntimeID(this.getId());
+                // The fields, not the argument. Callers pass a scratch vector - the spawn path
+                // hands over temporalVector - and super.setMotion has already run the motion event
+                // and updateMovement by now, either of which reuses that scratch for a position.
+                // Reading it again here put the player's own block position on the wire as a
+                // velocity, which is what the client was told to travel in one tick.
                 packet.setMotion(Vector3f.from(this.motionX, this.motionY, this.motionZ));
                 this.sendPacket(packet);  // Send it to self
             }
