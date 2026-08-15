@@ -222,14 +222,24 @@ public class EntityMagmaCube extends EntityMob implements EntityWalkable, Entity
         };
     }
 
+    /**
+     * Same split as {@link EntitySlime#kill()}, and the same reason for the two rules: a cube saved
+     * with no health left kills itself from {@link #initEntity}, and passing it own NBT down to the
+     * children made every one of them die on construction and split in turn - an unloadable chunk
+     * and a blown stack. So only a cube that has lived splits, and children start from a fresh NBT.
+     */
     @Override
     public void kill() {
-        if (getVariant() != SIZE_SMALL) {
+        if (!this.justCreated && getVariant() != SIZE_SMALL) {
+            final int smaller = getSmaller();
             for (int i = 1; i < Utils.rand(2, 5); i++) {
-                EntityMagmaCube magmaCube = new EntityMagmaCube(this.getChunk(), this.getNbt());
-                magmaCube.setPosition(this.add(Utils.rand(-0.5, 0.5), 0, Utils.rand(-0.5, 0.5)));
+                CompoundTag childNbt = Entity.getDefaultNBT(
+                    this.add(Utils.rand(-0.5, 0.5), 0, Utils.rand(-0.5, 0.5)));
+                childNbt.putInt(TAG_SLIME_SIZE, smaller);
+
+                EntityMagmaCube magmaCube = new EntityMagmaCube(this.getChunk(), childNbt);
                 magmaCube.setRotation(this.yaw, this.pitch);
-                magmaCube.setVariant(getSmaller());
+                magmaCube.setVariant(smaller);
                 magmaCube.spawnToAll();
             }
         }

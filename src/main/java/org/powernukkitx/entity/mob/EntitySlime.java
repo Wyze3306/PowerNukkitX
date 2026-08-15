@@ -209,14 +209,25 @@ public class EntitySlime extends EntityMob implements EntityWalkable, EntityVari
         };
     }
 
+    /**
+     * A slime saved with no health left kills itself from {@link #initEntity}, before it has even
+     * finished being built. Splitting it there handed each child the parent's own NBT - health
+     * included - so every child died on construction and split in turn: the chunk holding that one
+     * slime could no longer be loaded, it blew the stack. Hence the two rules here: only a slime
+     * that has lived splits, and a child starts from a fresh NBT for its own size.
+     */
     @Override
     public void kill() {
-        if (getVariant() != SIZE_SMALL) {
+        if (!this.justCreated && getVariant() != SIZE_SMALL) {
+            final int smaller = getSmaller();
             for (int i = 1; i < Utils.rand(2, 5); i++) {
-                EntitySlime slime = new EntitySlime(this.getChunk(), this.getNbt());
-                slime.setPosition(this.add(Utils.rand(-0.5, 0.5), 0, Utils.rand(-0.5, 0.5)));
+                CompoundTag childNbt = Entity.getDefaultNBT(
+                    this.add(Utils.rand(-0.5, 0.5), 0, Utils.rand(-0.5, 0.5)));
+                childNbt.putInt(TAG_SLIME_SIZE, smaller);
+
+                EntitySlime slime = new EntitySlime(this.getChunk(), childNbt);
                 slime.setRotation(this.yaw, this.pitch);
-                slime.setVariant(getSmaller());
+                slime.setVariant(smaller);
                 slime.spawnToAll();
             }
         }
