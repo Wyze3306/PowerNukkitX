@@ -206,6 +206,9 @@ public class CommandEnum {
     public void updateSoftEnum(SoftEnumUpdateType mode, String... value) {
         if (!this.soft) return;
         final UpdateSoftEnumPacket packet = new UpdateSoftEnumPacket();
+        // ADD and REMOVE describe a delta: shipping the whole enum under REMOVE would tell the client
+        // to drop every remaining value, not just the one being removed. Only fall back on the full
+        // list when the caller named no value, which is what REPLACE means.
         packet.setSoftEnum(value.length == 0 ? this.toNetwork() : this.toNetwork(Arrays.asList(value)));
         packet.setUpdateType(mode);
         Server.broadcastPacket(this.recipients(), packet);
@@ -224,6 +227,20 @@ public class CommandEnum {
         Server.broadcastPacket(this.recipients(), packet);
     }
 
+    /**
+     * The players whose client can resolve an update for this enum.
+     *
+     * <p>
+     * A client only learns a soft enum from the {@link org.cloudburstmc.protocol.bedrock.packet.AvailableCommandsPacket}
+     * that declares it on a command parameter, and that packet is filtered per permission: a player who
+     * cannot run {@code /world} never receives the {@code world} enum. Broadcasting an update for an
+     * enum a client does not know corrupts its command registry, and the crash only surfaces later,
+     * when the player opens the chat and types any command — which is why it reads as "the client
+     * crashes on /msg" rather than as a level being loaded.
+     * </p>
+     *
+     * @return the online players this enum was declared to
+     */
     private Collection<Player> recipients() {
         final List<Player> recipients = new ObjectArrayList<>();
         for (Player player : Server.getInstance().getOnlinePlayers().values()) {
@@ -248,6 +265,12 @@ public class CommandEnum {
         return this.toNetwork(this.getValues());
     }
 
+    /**
+     * Builds the network form of this enum carrying the given values instead of the current ones.
+     *
+     * @param values the values to ship
+     * @return the network enum data
+     */
     public CommandEnumData toNetwork(Collection<String> values) {
         final Map<String, Set<CommandEnumConstraint>> networkValues = new Object2ObjectOpenHashMap<>();
         for (String value : values) {

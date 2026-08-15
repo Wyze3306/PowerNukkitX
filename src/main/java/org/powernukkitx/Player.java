@@ -462,6 +462,17 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
 
     private final Map<Long, Runnable> ackRunnables = new HashMap<>();
 
+    /**
+     * Names of the soft enums this client knows about, i.e. the ones carried by the commands of the
+     * last {@link #syncAvailableCommands()}.
+     *
+     * <p>
+     * A client only learns a soft enum through the {@link AvailableCommandsPacket} that declares it on
+     * a parameter, and that packet is filtered per permission. An {@link UpdateSoftEnumPacket} naming
+     * an enum the client never received corrupts its command registry, so soft enum updates are only
+     * sent to the players listed here, see {@link org.powernukkitx.command.data.CommandEnum#updateSoftEnum()}.
+     * </p>
+     */
     private final Set<String> declaredSoftEnums = ConcurrentHashMap.newKeySet();
 
     @UsedByReflection
@@ -7147,6 +7158,13 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         }
     }
 
+    /**
+     * Replaces the set of soft enums this client knows with the ones declared by the command data just
+     * sent. The client rebuilds its whole command registry from that packet, so anything it knew before
+     * and that is missing from this list is gone.
+     *
+     * @param commandData the commands sent in the {@link AvailableCommandsPacket}
+     */
     private void trackDeclaredSoftEnums(List<CommandData> commandData) {
         final Set<String> declared = new HashSet<>();
         for (CommandData command : commandData) {
@@ -7163,6 +7181,13 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         this.declaredSoftEnums.addAll(declared);
     }
 
+    /**
+     * Whether this client was told about the given soft enum and can therefore resolve an
+     * {@link UpdateSoftEnumPacket} naming it.
+     *
+     * @param name the soft enum name
+     * @return true if the enum was declared to this client by the last command sync
+     */
     public boolean knowsSoftEnum(String name) {
         return this.declaredSoftEnums.contains(name);
     }
