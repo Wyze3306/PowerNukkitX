@@ -3125,14 +3125,22 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
 
     /**
      * Get the network latency of the player.
+     * <p>
+     * The RakNet child channel is dropped as soon as the connection goes away, while the player
+     * stays in the online list for the rest of the tick that removes them. Anything polling every
+     * player - an AFK sweep, a scoreboard - therefore lands on a session that is already gone, so
+     * a missing channel is answered with "unknown" rather than thrown at the caller.
      *
-     * @return long
+     * @return the latency in milliseconds, or -1 if the connection can no longer be measured
      */
     public long getPing() {
         var rakServerChannel = (RakServerChannel) this.session.getPeer().getChannel().parent();
         var childChannel = rakServerChannel.getChildChannel(getSocketAddress());
+        if (childChannel == null) {
+            return -1;
+        }
         var rakSessionCodec = childChannel.rakPipeline().get(RakSessionCodec.class);
-        return rakSessionCodec.getPing();
+        return rakSessionCodec == null ? -1 : rakSessionCodec.getPing();
     }
 
     public boolean sleepOn(Vector3 pos) {
