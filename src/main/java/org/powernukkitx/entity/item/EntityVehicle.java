@@ -86,13 +86,12 @@ public abstract class EntityVehicle extends Entity implements EntityInteractable
             setRollingAmplitude(getRollingAmplitude() - 1);
         }
 
-        // A killer task
-        if (this.level != null) {
-            if (y < this.level.getMinHeight() - 16) {
-                kill();
-            }
-        } else if (y < -16) {
-            kill();
+        // Below the world: discard instead of killing, the way vanilla removes what falls out of
+        // it. kill() runs the death drops, and for a chest minecart that is the whole cargo spilled
+        // into the void, one item entity per slot.
+        if (y < (this.level == null ? -16 : this.level.getMinHeight() - 16)) {
+            this.close();
+            return false;
         }
         // Movement code
         updateMovement();
