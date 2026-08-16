@@ -554,6 +554,22 @@ public abstract class BaseInventory implements Inventory {
                 continue;
             }
             pk.setContainerId(id);
+            // Sans nom de conteneur le paquet part avec le défaut du protocole,
+            // ANVIL_INPUT_CONTAINER, qui n'est que le premier de l'enum : le
+            // contenu d'un coffre s'annonce alors comme une enclume. Un client
+            // qui adresse ses slots par FullContainerName — c'est le cas de
+            // l'interface tactile — ne peut plus construire de requête pour
+            // eux, et ses gestes ne produisent aucun paquet. sendSlot le
+            // renseigne déjà, d'où des slots redevenus saisissables dès qu'ils
+            // sont rafraîchis un par un.
+            //
+            // Lu à même la table plutôt que par getContainerEnumName, qui lève
+            // sur un slot non mappé : un inventaire sans table déclarée doit
+            // garder son ancien comportement, pas cesser d'être envoyé.
+            ContainerEnumName containerName = this.slotTypeMap().get(0);
+            if (containerName != null) {
+                pk.setFullContainerName(new FullContainerName(containerName, null));
+            }
             player.sendPacket(pk);
         }
     }
