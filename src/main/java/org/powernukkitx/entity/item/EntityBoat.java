@@ -244,6 +244,7 @@ public class EntityBoat extends EntityVehicle {
             setRollingAmplitude(getRollingAmplitude() - 1);
         }
 
+        // Below the world: discard instead of killing, so that nothing is dropped into the void.
         if (y < (this.level == null ? -16 : this.level.getMinHeight() - 16)) {
             this.close();
             return false;
