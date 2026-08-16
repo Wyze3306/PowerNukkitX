@@ -27,17 +27,47 @@ import org.cloudburstmc.protocol.bedrock.packet.UpdateSubChunkBlocksPacket;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Predicate;
 
 public class BlockManager {
     private static final String PENDING_SUB_CHUNK_UPDATES = "pendingSubChunkUpdates";
+
+    /**
+     * How many chunks may hold hooks waiting for their generation at once. A structure that spills
+     * into a chunk nobody ever visits would otherwise keep its hooks alive for the whole uptime.
+     */
+    private static final int MAX_PENDING_HOOK_CHUNKS = 4096;
+
+    /**
+     * Hooks waiting for the chunk they belong to to be generated, keyed by level and chunk. Unlike
+     * {@link #PENDING_SUB_CHUNK_UPDATES} these cannot be stored in the chunk NBT, so they only
+     * survive within a session; a hook lost to a restart degrades to the block-only result.
+     */
+    private static final LinkedHashMap<PendingHookKey, List<Runnable>> PENDING_HOOKS = new LinkedHashMap<>() {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<PendingHookKey, List<Runnable>> eldest) {
+            return size() > MAX_PENDING_HOOK_CHUNKS;
+        }
+    };
+
+    private record PendingHookKey(int levelId, long chunkHash) {
+    }
 
     private final Level level;
     private final Long2ObjectOpenHashMap<Block> caches;
     private final Long2ObjectOpenHashMap<Block> places;
 
     protected final ObjectOpenHashSet<Runnable> hooks;
+
+    /**
+     * Hooks bound to the chunk whose blocks they depend on. When that chunk is not generated yet its
+     * blocks are deferred to {@link #PENDING_SUB_CHUNK_UPDATES} instead of being written, so running
+     * such a hook right away would build on terrain that is still empty.
+     */
+    private final Long2ObjectOpenHashMap<ObjectArrayList<Runnable>> chunkHooks;
 
     private long hashXYZ(int x, int y, int z, int layer) {
         return (((long) (x + 30_000_000) & 0x3FFFFFFL) << 37)
@@ -51,19 +81,65 @@ public class BlockManager {
         this.caches = new Long2ObjectOpenHashMap<>();
         this.places = new Long2ObjectOpenHashMap<>();
         this.hooks = new ObjectOpenHashSet<>();
+        this.chunkHooks = new Long2ObjectOpenHashMap<>();
     }
 
     public void addHook(Runnable runnable) {
         this.hooks.add(runnable);
     }
 
+    /**
+     * Registers a hook that must not run before the given chunk is generated, because it reads or
+     * populates what this manager staged there: spawning an entity or filling a block entity in a
+     * chunk still awaiting generation would do so in the middle of empty terrain.
+     */
+    public void addHook(int chunkX, int chunkZ, Runnable runnable) {
+        this.chunkHooks.computeIfAbsent(Level.chunkHash(chunkX, chunkZ), k -> new ObjectArrayList<>()).add(runnable);
+    }
+
     public ObjectOpenHashSet<Runnable> getHooks() {
         return this.hooks;
     }
 
+    public Long2ObjectOpenHashMap<ObjectArrayList<Runnable>> getChunkHooks() {
+        return this.chunkHooks;
+    }
+
     protected void applyHooks() {
+        for (var entry : this.chunkHooks.long2ObjectEntrySet()) {
+            long chunkHash = entry.getLongKey();
+            IChunk chunk = this.level.getChunk(Level.getHashX(chunkHash), Level.getHashZ(chunkHash));
+            if (chunk != null && chunk.isGenerated()) {
+                this.hooks.addAll(entry.getValue());
+            } else {
+                deferHooks(this.level, chunkHash, entry.getValue());
+            }
+        }
+        this.chunkHooks.clear();
+
         hooks.parallelStream().forEach(Runnable::run);
         hooks.clear();
+    }
+
+    private static void deferHooks(Level level, long chunkHash, List<Runnable> runnables) {
+        PendingHookKey key = new PendingHookKey(level.getId(), chunkHash);
+        synchronized (PENDING_HOOKS) {
+            PENDING_HOOKS.computeIfAbsent(key, k -> new ObjectArrayList<>()).addAll(runnables);
+        }
+    }
+
+    private static void runPendingHooks(Level level, IChunk chunk) {
+        PendingHookKey key = new PendingHookKey(level.getId(), Level.chunkHash(chunk.getX(), chunk.getZ()));
+        List<Runnable> runnables;
+        synchronized (PENDING_HOOKS) {
+            runnables = PENDING_HOOKS.remove(key);
+        }
+        if (runnables == null) {
+            return;
+        }
+        for (Runnable runnable : runnables) {
+            runnable.run();
+        }
     }
 
     public String getBlockIdIfCachedOrLoaded(int x, int y, int z) {
@@ -183,6 +259,7 @@ public class BlockManager {
     public void merge(BlockManager manager) {
         if (manager.places.isEmpty()) {
             this.hooks.addAll(manager.getHooks());
+            this.mergeChunkHooks(manager);
             return;
         }
         if (this.level == manager.level) {
@@ -200,6 +277,13 @@ public class BlockManager {
             }
         }
         this.hooks.addAll(manager.getHooks());
+        this.mergeChunkHooks(manager);
+    }
+
+    private void mergeChunkHooks(BlockManager manager) {
+        for (var entry : manager.chunkHooks.long2ObjectEntrySet()) {
+            this.chunkHooks.computeIfAbsent(entry.getLongKey(), k -> new ObjectArrayList<>()).addAll(entry.getValue());
+        }
     }
 
     public Level getLevel() {
@@ -441,6 +525,12 @@ public class BlockManager {
             return;
         }
 
+        // Blocks first: the hooks held back for this chunk are precisely the ones that need them.
+        applyPendingBlocks(level, chunk);
+        runPendingHooks(level, chunk);
+    }
+
+    private static void applyPendingBlocks(Level level, IChunk chunk) {
         ListTag<IntArrayTag> pending;
         synchronized (chunk) {
             CompoundTag extraData = chunk.getExtraData();
