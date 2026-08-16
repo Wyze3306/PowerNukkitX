@@ -26,10 +26,9 @@ public abstract class PopulatorStage extends GenerateStage {
                 log.error("Error while applying populator {}", name, e);
             }
         }
-        if (!root.getBlocks().isEmpty()) {
-            root.applySubChunkUpdate();
-            root.getBlocks().forEach(block -> block.getChunk().setChanged());
-        }
+        // Applied even without blocks: a populator may have registered hooks only, and
+        // applySubChunkUpdate is what runs them. It marks the touched chunks changed itself.
+        root.applySubChunkUpdate();
     }
 
     public abstract ObjectArraySet<String> populators();
