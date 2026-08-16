@@ -31,7 +31,18 @@ public final class PacketTrace {
     /**
      * How many entries are kept per traced player. A burst of identical packets counts as one.
      */
-    public static final int CAPACITY = 192;
+    public static final int CAPACITY = 512;
+
+    /**
+     * How long a client may stay silent before the recorder considers it gone and stops writing.
+     * <p>
+     * A live client sends its input every tick, so two seconds without a word is already abnormal,
+     * while the session only times out after ten. Recording those ten seconds is what emptied the
+     * window of everything that mattered: the traffic the server kept pushing to a dead client
+     * pushed out the packet that killed it. Freezing keeps the window on the last moments the
+     * client was still there.
+     */
+    private static final long SILENCE_TICKS = 40;
 
     /**
      * Packets a level emits continuously, each with a position of its own. Folding these on type
@@ -110,6 +121,12 @@ public final class PacketTrace {
         }
         final PacketTrace trace = traceFor(player);
         if (trace == null) {
+            return;
+        }
+        final long silentSince = trace.lastInboundTick;
+        if (silentSince >= 0 && tick - silentSince > SILENCE_TICKS) {
+            // The client stopped answering: it is either already dead or about to be timed out, and
+            // nothing sent from here on can teach us anything. Keep what is in the window.
             return;
         }
         String summary;
@@ -220,6 +237,10 @@ public final class PacketTrace {
                 out.append("\n  NOTE: the whole window is after the client went silent - the packet to")
                         .append(" look for scrolled out. Raise PacketTrace.CAPACITY, or reproduce")
                         .append(" somewhere quieter, and trace that one player rather than everyone.");
+            } else if (silentAt >= 0) {
+                out.append("\n  (recording stopped ").append(SILENCE_TICKS)
+                        .append(" ticks after the client went quiet; the last entries above are the")
+                        .append(" last things it could still have read)");
             }
             trace.recorded = 0;
             trace.next = 0;
