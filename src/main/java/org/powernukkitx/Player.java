@@ -7047,9 +7047,26 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
     }
 
     public void syncAvailableCommands() {
+        final List<CommandData> commandData = this.collectAvailableCommands();
+        if (commandData.isEmpty()) {
+            return;
+        }
         AvailableCommandsPacket pk = new AvailableCommandsPacket();
+        pk.getCommands().addAll(commandData);
+        this.sendPacketImmediately(pk);
+        this.trackDeclaredSoftEnums(commandData);
+    }
+
+    /**
+     * Builds the command list this player would be sent, without sending anything.
+     * <p>
+     * Same data as {@link #syncAvailableCommands()} puts on the wire, so a dump of this is a dump of
+     * what the client actually has to work with - see {@code /debug commands}.
+     *
+     * @return the commands visible to this player, empty when there are none
+     */
+    public List<CommandData> collectAvailableCommands() {
         Map<String, CommandDataVersions> data = new HashMap<>();
-        int count = 0;
         final Map<String, Command> commands = Server.getInstance().getCommandMap().getCommands();
         // Snapshot the command list under the lock, then release immediately.
         // Permission checks and data generation happen outside the lock to minimise contention.
@@ -7061,24 +7078,18 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             if (!command.testPermissionSilent(this.getPlayer()) || !command.isRegistered() || command.isServerSideOnly()) {
                 continue;
             }
-            ++count;
             CommandDataVersions data0 = command.generateCustomCommandData(this.getPlayer());
             data.put(command.getName(), data0);
         }
-        if (count > 0) {
-            Map<String, CommandDataVersions> filtered = getStringCommandDataVersionsMap(data);
-
-            if (!filtered.isEmpty()) {
-                final List<CommandData> commandData = new ObjectArrayList<>();
-                for (CommandDataVersions value : filtered.values()) {
-                    commandData.addAll(value.toNetwork());
-                }
-
-                pk.getCommands().addAll(commandData);
-                this.sendPacketImmediately(pk);
-                this.trackDeclaredSoftEnums(commandData);
-            }
+        if (data.isEmpty()) {
+            return Collections.emptyList();
         }
+        Map<String, CommandDataVersions> filtered = getStringCommandDataVersionsMap(data);
+        final List<CommandData> commandData = new ObjectArrayList<>();
+        for (CommandDataVersions value : filtered.values()) {
+            commandData.addAll(value.toNetwork());
+        }
+        return commandData;
     }
 
     /**

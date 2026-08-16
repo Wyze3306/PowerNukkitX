@@ -27,6 +27,13 @@ public class NetworkPacketHandler implements BedrockPacketHandler {
     public PacketSignal handlePacket(BedrockPacket packet) {
         this.recordForBotnetDetection(packet);
 
+        if (PacketTrace.isArmed()) {
+            final Player talking = this.session.getPlayer();
+            if (talking != null) {
+                PacketTrace.recordInbound(talking, this.server.getTick());
+            }
+        }
+
         if (!this.session.checkRateLimits()) {
             return PacketSignal.HANDLED;
         }

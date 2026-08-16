@@ -58,6 +58,8 @@ public final class PacketTrace {
     private final int[] repeats = new int[CAPACITY];
     private int next;
     private int recorded;
+    private volatile long lastInboundTick = -1;
+    private volatile long lastInboundAt;
 
     private PacketTrace() {
     }
@@ -149,6 +151,28 @@ public final class PacketTrace {
     }
 
     /**
+     * Notes that the client is still talking.
+     * <p>
+     * A client that crashes stops answering, but the server keeps sending to it until the session
+     * times out - tens of seconds of traffic that the client never saw, which is all the window ends
+     * up holding on a {@code disconnect.timeout}. The last inbound tick is where the client actually
+     * died, so the dump can draw the line and say which entries are still worth reading.
+     * <p>
+     * Safe to call from any thread.
+     */
+    public static void recordInbound(@NotNull Player player, long tick) {
+        if (!armed) {
+            return;
+        }
+        final PacketTrace trace = traceFor(player);
+        if (trace == null) {
+            return;
+        }
+        trace.lastInboundTick = tick;
+        trace.lastInboundAt = System.currentTimeMillis();
+    }
+
+    /**
      * Prints what was sent to a player before their connection went away, oldest first, and forgets
      * it. No-op when that player was not being traced.
      *
@@ -168,9 +192,20 @@ public final class PacketTrace {
         out.append("Last packets sent to ").append(player.getName())
                 .append(" before the connection ended (").append(reason).append("), oldest first:");
         synchronized (trace) {
+            final long silentAt = trace.lastInboundTick;
+            if (silentAt >= 0) {
+                out.append("\n  client last spoke at tick ").append(silentAt)
+                        .append(", ").append(System.currentTimeMillis() - trace.lastInboundAt)
+                        .append("ms before this dump");
+            }
             final int start = trace.recorded < CAPACITY ? 0 : trace.next;
+            boolean lineDrawn = false;
             for (int i = 0; i < trace.recorded; i++) {
                 final int slot = (start + i) % CAPACITY;
+                if (!lineDrawn && silentAt >= 0 && trace.ticks[slot] > silentAt) {
+                    lineDrawn = true;
+                    out.append("\n  --- client stopped answering here; what follows never reached it ---");
+                }
                 out.append("\n  tick ").append(trace.ticks[slot]).append(" | ");
                 if (trace.repeats[slot] > 1) {
                     out.append('x').append(trace.repeats[slot]).append(' ');
@@ -179,9 +214,16 @@ public final class PacketTrace {
             }
             if (trace.recorded == 0) {
                 out.append("\n  (nothing recorded)");
+            } else if (silentAt >= 0 && trace.ticks[start] > silentAt) {
+                // Every entry postdates the client's last word, so the packet it choked on has already
+                // been pushed out of the window by the traffic the server kept sending into the void.
+                out.append("\n  NOTE: the whole window is after the client went silent - the packet to")
+                        .append(" look for scrolled out. Raise PacketTrace.CAPACITY, or reproduce")
+                        .append(" somewhere quieter, and trace that one player rather than everyone.");
             }
             trace.recorded = 0;
             trace.next = 0;
+            trace.lastInboundTick = -1;
         }
         log.warn(out.toString());
     }
