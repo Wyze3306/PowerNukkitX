@@ -188,12 +188,26 @@ public abstract class Command {
         NukkitCommandData customData = this.commandData.clone();
 
         if (getAliases().length > 0) {
-            List<String> aliases = new ArrayList<>(Arrays.asList(getAliases()));
-            if (!aliases.contains(this.name)) {
+            // Only advertise the labels that still route back here. A plugin command takes over the
+            // name and the aliases of the vanilla command it replaces - /msg and /w end up on the
+            // plugin while /tell keeps listing them in getAliases() - so the untouched list makes the
+            // packet declare two different commands answering to the same label. The client indexes
+            // its command registry by label, and a name it holds twice is a name it resolves wrong
+            // as soon as the player types it, long after the packet was accepted.
+            final CommandMap commandMap = player.getServer().getCommandMap();
+            List<String> aliases = new ArrayList<>();
+            for (String alias : getAliases()) {
+                if (commandMap.getCommand(alias) == this) {
+                    aliases.add(alias);
+                }
+            }
+            if (!aliases.contains(this.name) && commandMap.getCommand(this.name) == this) {
                 aliases.add(this.name);
             }
 
-            customData.aliases = new CommandEnum(this.name + "Aliases", aliases);
+            // An alias enum with nothing left in it is worse than none: the client still allocates the
+            // enum and binds it to the command.
+            customData.aliases = aliases.isEmpty() ? null : new CommandEnum(this.name + "Aliases", aliases);
         }
 
         if (plugin == InternalPlugin.INSTANCE) {
