@@ -366,6 +366,15 @@ public class CommandParameter {
             if (type == null) {
                 type = CommandParamType.RAW_TEXT;
             }
+            if (type == CommandParamType.MESSAGE) {
+                // These identifiers are symbols of the client's command grammar, not a flat list of
+                // argument kinds: MESSAGE (67) is an inner node of the message rule, MESSAGE_ROOT
+                // (68) is the rule itself. A parameter has to name the rule - naming the inner node
+                // makes the client expand a nonterminal out of context, and it walks that grammar on
+                // every keystroke, so the command takes it down while the player is still typing.
+                // BDS and PocketMine both send the root here.
+                type = CommandParamType.MESSAGE_ROOT;
+            }
             final Field field = CommandParam.class.getDeclaredField(type.name());
             final CommandParam param = (CommandParam) field.get(null);
             data.setType(param);
