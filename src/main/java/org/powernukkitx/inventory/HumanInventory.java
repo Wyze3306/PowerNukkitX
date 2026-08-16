@@ -796,9 +796,14 @@ public class HumanInventory extends BaseInventory {
                 continue;
             }
             inventoryContentPacket.setContainerId(id);
+            // getContainerEnumName attend un slot, pas l'id de fenêtre : le 0 de
+            // l'inventaire du joueur y désignait le slot 0, donc HOTBAR_CONTAINER
+            // pour les 36 slots envoyés ici. Le paquet couvre hotbar ET
+            // inventaire, et c'est ce nom-là que le client emploie ensuite dans
+            // ses requêtes.
             inventoryContentPacket.setFullContainerName(
                     new FullContainerName(
-                            this.getContainerEnumName(id),
+                            ContainerEnumName.COMBINED_HOTBAR_AND_INVENTORY_CONTAINER,
                             null
                     )
             );
