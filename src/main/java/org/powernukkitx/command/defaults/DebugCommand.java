@@ -1,12 +1,17 @@
 package org.powernukkitx.command.defaults;
 
 import it.unimi.dsi.fastutil.Pair;
+import lombok.extern.slf4j.Slf4j;
 import org.cloudburstmc.nbt.NBTInputStream;
 import org.cloudburstmc.nbt.NbtMap;
 import org.cloudburstmc.nbt.NbtUtils;
 import org.cloudburstmc.protocol.bedrock.data.biome.BiomeConsolidatedFeatureData;
 import org.cloudburstmc.protocol.bedrock.data.biome.BiomeDefinitionChunkGenData;
 import org.cloudburstmc.protocol.bedrock.data.biome.BiomeDefinitionData;
+import org.cloudburstmc.protocol.bedrock.data.command.CommandData;
+import org.cloudburstmc.protocol.bedrock.data.command.CommandEnumData;
+import org.cloudburstmc.protocol.bedrock.data.command.CommandOverloadData;
+import org.cloudburstmc.protocol.bedrock.data.command.CommandParamData;
 import org.cloudburstmc.protocol.bedrock.data.command.CommandParamType;
 import org.powernukkitx.Player;
 import org.powernukkitx.Server;
@@ -45,13 +50,18 @@ import org.powernukkitx.utils.GameLoop;
 import org.powernukkitx.utils.ItemHelper;
 import org.powernukkitx.utils.TextFormat;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import static org.powernukkitx.math.NukkitMath.formatNanos;
 
+@Slf4j
 public class DebugCommand extends TestCommand implements CoreCommand {
     public DebugCommand(String name) {
         super(name, "commands.debug.description");
@@ -117,6 +127,11 @@ public class DebugCommand extends TestCommand implements CoreCommand {
                 CommandParameter.newEnum("packets", new String[]{"packets"}),
                 CommandParameter.newType("target", CommandParamType.ID)
         });
+        this.commandParameters.put("commands", new CommandParameter[]{
+                CommandParameter.newEnum("commands", new String[]{"commands"}),
+                CommandParameter.newType("target", CommandParamType.ID),
+                CommandParameter.newType("filter", true, CommandParamType.ID)
+        });
         this.enableParamTree();
     }
 
@@ -138,6 +153,7 @@ public class DebugCommand extends TestCommand implements CoreCommand {
             case "genrate" -> handleGenRate(sender);
             case "mspt" -> handleMspt(sender, result.getValue());
             case "packets" -> handlePackets(sender, result.getValue());
+            case "commands" -> handleCommands(sender, result.getValue());
             default -> 0;
         };
     }
@@ -455,6 +471,157 @@ public class DebugCommand extends TestCommand implements CoreCommand {
                 + "§e. They are printed to the console when that player's connection ends - including when the"
                 + " client hangs up on its own, which is what \"Session closed\" means. §c/debug packets off§e when done.");
         return 1;
+    }
+
+    /**
+     * Prints the command list a player was actually sent.
+     * <p>
+     * A Bedrock client that chokes on a command does it while typing, off its own registry, with no
+     * packet on the wire to blame and nothing logged server side. The only way to see what it is
+     * working from is to print the very data {@link Player#syncAvailableCommands()} handed it, which
+     * is what this does, plus the malformations known to reach the client as something it cannot
+     * resolve: a label claimed twice, an enum name carrying two different value sets, a parameter
+     * with no type, an empty enum.
+     */
+    private int handleCommands(CommandSender sender, ParamList value) {
+        final String targetName = value.getResult(1).toString();
+        final Player target = sender.getServer().getPlayer(targetName);
+        if (target == null) {
+            sender.sendMessage("§cNo such player online: " + targetName);
+            return 0;
+        }
+        final String filter = value.hasResult(2) ? value.getResult(2).toString().toLowerCase(Locale.ENGLISH) : null;
+        final List<CommandData> commands = target.collectAvailableCommands();
+
+        final StringBuilder out = new StringBuilder(4096);
+        out.append("Commands sent to ").append(target.getName())
+                .append(" (op=").append(target.isOp()).append("): ").append(commands.size()).append(" total");
+        if (filter != null) {
+            out.append(", showing those matching \"").append(filter).append('"');
+        }
+        for (CommandData command : commands) {
+            if (filter != null && !matchesFilter(command, filter)) {
+                continue;
+            }
+            out.append("\n  ").append(command.getName())
+                    .append(" | perm=").append(command.getPermission())
+                    .append(" | flags=").append(command.getFlags())
+                    .append(" | aliases=").append(command.getAliases() == null
+                            ? "none"
+                            : command.getAliases().getName() + command.getAliases().getValues().keySet())
+                    .append(" | desc=").append(command.getDescription());
+            for (CommandOverloadData overload : command.getOverloads()) {
+                out.append("\n      overload(chaining=").append(overload.isChaining()).append(')');
+                for (CommandParamData param : overload.getOverloads()) {
+                    out.append("\n        ").append(param.getName())
+                            .append(" type=").append(param.getType())
+                            .append(param.isOptional() ? " optional" : " required");
+                    if (param.getPostfix() != null) {
+                        out.append(" postfix=").append(param.getPostfix());
+                    }
+                    if (!param.getOptions().isEmpty()) {
+                        out.append(" options=").append(param.getOptions());
+                    }
+                    final CommandEnumData enumData = param.getEnumData();
+                    if (enumData != null) {
+                        out.append(" enum=").append(enumData.getName())
+                                .append(enumData.isSoft() ? "(soft)" : "(hard)")
+                                .append(' ').append(enumData.getValues().keySet());
+                    }
+                }
+            }
+        }
+        appendAnomalies(out, commands);
+        log.warn(out.toString());
+        sender.sendMessage("§eDumped " + commands.size() + " commands for §f" + target.getName()
+                + "§e to the console.");
+        return 1;
+    }
+
+    private static boolean matchesFilter(CommandData command, String filter) {
+        if (command.getName().toLowerCase(Locale.ENGLISH).contains(filter)) {
+            return true;
+        }
+        final CommandEnumData aliases = command.getAliases();
+        if (aliases == null) {
+            return false;
+        }
+        for (String alias : aliases.getValues().keySet()) {
+            if (alias.toLowerCase(Locale.ENGLISH).contains(filter)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Appends whatever in this command list the client cannot make unambiguous sense of. Always runs
+     * on the whole list, never on the filtered view: the entry that breaks a command is usually a
+     * different command claiming the same label.
+     */
+    private static void appendAnomalies(StringBuilder out, List<CommandData> commands) {
+        final Map<String, List<String>> labelOwners = new LinkedHashMap<>();
+        final Map<String, Map<String, Set<String>>> enumShapes = new LinkedHashMap<>();
+        final List<String> untypedParams = new ArrayList<>();
+        final List<String> emptyEnums = new ArrayList<>();
+
+        for (CommandData command : commands) {
+            labelOwners.computeIfAbsent(command.getName().toLowerCase(Locale.ENGLISH), unused -> new ArrayList<>())
+                    .add(command.getName());
+            if (command.getAliases() != null) {
+                for (String alias : command.getAliases().getValues().keySet()) {
+                    labelOwners.computeIfAbsent(alias.toLowerCase(Locale.ENGLISH), unused -> new ArrayList<>())
+                            .add(command.getName() + " (alias)");
+                }
+                if (command.getAliases().getValues().isEmpty()) {
+                    emptyEnums.add(command.getName() + " aliases");
+                }
+            }
+            for (CommandOverloadData overload : command.getOverloads()) {
+                for (CommandParamData param : overload.getOverloads()) {
+                    if (param.getType() == null) {
+                        untypedParams.add(command.getName() + '.' + param.getName());
+                    }
+                    final CommandEnumData enumData = param.getEnumData();
+                    if (enumData == null) {
+                        continue;
+                    }
+                    if (enumData.getValues().isEmpty()) {
+                        emptyEnums.add(command.getName() + '.' + param.getName() + " -> " + enumData.getName());
+                    }
+                    enumShapes.computeIfAbsent(enumData.getName(), unused -> new LinkedHashMap<>())
+                            .put(command.getName() + '.' + param.getName(), enumData.getValues().keySet());
+                }
+            }
+        }
+
+        out.append("\n  --- anomalies ---");
+        boolean clean = true;
+        for (Map.Entry<String, List<String>> entry : labelOwners.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                clean = false;
+                out.append("\n  label \"").append(entry.getKey()).append("\" claimed by ").append(entry.getValue());
+            }
+        }
+        for (Map.Entry<String, Map<String, Set<String>>> entry : enumShapes.entrySet()) {
+            final Set<Set<String>> distinct = new HashSet<>(entry.getValue().values());
+            if (distinct.size() > 1) {
+                clean = false;
+                out.append("\n  enum \"").append(entry.getKey()).append("\" declared with ").append(distinct.size())
+                        .append(" different value sets by ").append(entry.getValue().keySet());
+            }
+        }
+        if (!untypedParams.isEmpty()) {
+            clean = false;
+            out.append("\n  parameters with no type: ").append(untypedParams);
+        }
+        if (!emptyEnums.isEmpty()) {
+            clean = false;
+            out.append("\n  empty enums: ").append(emptyEnums);
+        }
+        if (clean) {
+            out.append(" none");
+        }
     }
 
     private int handleMspt(CommandSender sender, ParamList value) {
