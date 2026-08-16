@@ -10,6 +10,7 @@ import org.cloudburstmc.protocol.bedrock.data.command.CommandParamData;
 import org.cloudburstmc.protocol.bedrock.data.command.CommandPermissionLevel;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -173,6 +174,45 @@ public class NukkitCommandData implements Cloneable {
         }
     }
 
+    /**
+     * Splits an overload that makes a rest-of-line parameter optional into the two shapes it really
+     * means: one without it, one with it required.
+     * <p>
+     * No vanilla command declares an optional message parameter, and for good reason - it asks the
+     * client's parser to decide, on a greedy node that swallows everything left, between taking the
+     * rest of the line and stopping. The client walks that grammar on every keystroke while the
+     * player types, so the command takes the client down before it is ever sent, which leaves nothing
+     * on the wire and nothing in the server log.
+     * <p>
+     * Splitting says the same thing in a shape the client has: {@code /msg [joueur]} and
+     * {@code /msg <joueur> <message>}. The bare command stays typeable, so a plugin that answers an
+     * argument-less call with a form keeps working.
+     *
+     * @param parameters the declared parameters of one overload
+     * @return the overloads to send, the input unchanged when there is nothing to split
+     */
+    private static List<CommandParameter[]> expandOptionalRestOfLine(CommandParameter[] parameters) {
+        int greedy = -1;
+        for (int i = 0; i < parameters.length; i++) {
+            if (parameters[i] != null && parameters[i].optional && parameters[i].isRestOfLine()) {
+                greedy = i;
+                break;
+            }
+        }
+        if (greedy < 0) {
+            return List.<CommandParameter[]>of(parameters);
+        }
+
+        final CommandParameter[] without = Arrays.copyOfRange(parameters, 0, greedy);
+        // Everything up to the message has to be mandatory in the long shape: an optional parameter
+        // in front of a required one is the same ambiguity one step to the left.
+        final CommandParameter[] with = new CommandParameter[parameters.length];
+        for (int i = 0; i < parameters.length; i++) {
+            with[i] = i <= greedy ? parameters[i].asRequired() : parameters[i];
+        }
+        return List.of(without, with);
+    }
+
     public CommandData toNetwork() {
         final Set<CommandData.Flag> flags = new ObjectOpenHashSet<>();
         for (Flag flag : this.flags) {
@@ -185,16 +225,18 @@ public class NukkitCommandData implements Cloneable {
         final List<CommandOverloadData> overloadDataList = new ObjectArrayList<>();
         for (Map.Entry<String, CommandOverload> entry : this.overloads.entrySet()) {
             final CommandOverload value = entry.getValue();
-            final List<CommandParamData> params = new ObjectArrayList<>();
-            for (CommandParameter parameter : value.input.parameters) {
-                params.add(parameter.toNetwork());
+            for (CommandParameter[] parameters : expandOptionalRestOfLine(value.input.parameters)) {
+                final List<CommandParamData> params = new ObjectArrayList<>();
+                for (CommandParameter parameter : parameters) {
+                    params.add(parameter.toNetwork());
+                }
+                overloadDataList.add(
+                        new CommandOverloadData(
+                                value.chaining,
+                                params.toArray(CommandParamData[]::new)
+                        )
+                );
             }
-            overloadDataList.add(
-                    new CommandOverloadData(
-                            value.chaining,
-                            params.toArray(CommandParamData[]::new)
-                    )
-            );
         }
         return new CommandData(
                 this.name,

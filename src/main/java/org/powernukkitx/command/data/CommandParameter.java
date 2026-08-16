@@ -327,6 +327,35 @@ public class CommandParameter {
         return result;
     }
 
+    /**
+     * Whether this parameter swallows the rest of the line.
+     * <p>
+     * The message types are greedy: the client stops splitting on spaces and takes everything left as
+     * one value, so nothing can follow them and they are always the last of an overload.
+     *
+     * @return true for a rest-of-line text parameter
+     */
+    public boolean isRestOfLine() {
+        return this.enumData == null
+                && (this.type == CommandParamType.MESSAGE
+                || this.type == CommandParamType.MESSAGE_ROOT
+                || this.type == CommandParamType.MESSAGE_EXP);
+    }
+
+    /**
+     * This parameter, made mandatory.
+     *
+     * @return this when it already is, a mandatory copy otherwise
+     */
+    public CommandParameter asRequired() {
+        if (!this.optional) {
+            return this;
+        }
+        final CommandParameter copy = new CommandParameter(this.name, false, this.type, this.enumData, this.postFix, this.paramNode);
+        copy.paramOptions = this.paramOptions;
+        return copy;
+    }
+
     public CommandParamData toNetwork() {
         final CommandParamData data = new CommandParamData();
         data.setName(this.name);
