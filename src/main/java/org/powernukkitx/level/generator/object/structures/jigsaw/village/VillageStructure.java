@@ -75,9 +75,12 @@ public abstract class VillageStructure extends JigsawStructure {
     protected void postProcessStructure(StructureHelper helper) {
         List<Block> placedBlocks = new ArrayList<>(helper.getBlocks());
         Level level = helper.getLevel();
-        helper.addHook(() -> {
-            populatePendingChestLoot(level);
-        });
+        // Handed over to the hook: it may wait for a chunk, by which time the field has been
+        // refilled by the next structure.
+        Map<BlockVector3, RandomizableContainer> chestLoot = new HashMap<>(pendingChestLoot);
+        pendingChestLoot.clear();
+        helper.addHook(BlockManager.chunkHashesOfPositions(chestLoot.keySet()),
+                () -> populatePendingChestLoot(level, chestLoot));
         helper.applySubChunkUpdate();
 
         placedBlocks.stream()
@@ -206,8 +209,8 @@ public abstract class VillageStructure extends JigsawStructure {
             || structureName.contains("/houses/" + biome + "_big_house_");
     }
 
-    protected void populatePendingChestLoot(Level level) {
-        for (Map.Entry<BlockVector3, RandomizableContainer> entry : pendingChestLoot.entrySet()) {
+    protected void populatePendingChestLoot(Level level, Map<BlockVector3, RandomizableContainer> chestLoot) {
+        for (Map.Entry<BlockVector3, RandomizableContainer> entry : chestLoot.entrySet()) {
             BlockVector3 pos = entry.getKey();
             Block block = level.getBlock(pos.getX(), pos.getY(), pos.getZ());
             if (!(block instanceof BlockChest chest)) {
@@ -218,7 +221,6 @@ public abstract class VillageStructure extends JigsawStructure {
             inventory.clearAll();
             entry.getValue().create(inventory, createVillageLootRandom(level, pos));
         }
-        pendingChestLoot.clear();
     }
 
     protected RandomSourceProvider createVillageLootRandom(Level level, BlockVector3 pos) {

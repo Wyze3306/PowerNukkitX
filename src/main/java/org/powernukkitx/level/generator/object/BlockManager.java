@@ -19,6 +19,8 @@ import org.powernukkitx.nbt.tag.Tag;
 import org.powernukkitx.registry.Registries;
 import org.powernukkitx.utils.RuntimeBlockDefinition;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongCollection;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import org.cloudburstmc.protocol.bedrock.data.ActorBlockSyncMessageId;
@@ -26,10 +28,12 @@ import org.cloudburstmc.protocol.bedrock.data.BlockChangeEntry;
 import org.cloudburstmc.protocol.bedrock.packet.UpdateSubChunkBlocksPacket;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 
 public class BlockManager {
@@ -95,6 +99,65 @@ public class BlockManager {
      */
     public void addHook(int chunkX, int chunkZ, Runnable runnable) {
         this.chunkHooks.computeIfAbsent(Level.chunkHash(chunkX, chunkZ), k -> new ObjectArrayList<>()).add(runnable);
+    }
+
+    /**
+     * @see #addHook(int, int, Runnable)
+     */
+    public void addHook(Block block, Runnable runnable) {
+        this.addHook(block.getChunkX(), block.getChunkZ(), runnable);
+    }
+
+    /**
+     * @see #addHook(int, int, Runnable)
+     */
+    public void addHook(BlockVector3 pos, Runnable runnable) {
+        this.addHook(pos.getX() >> 4, pos.getZ() >> 4, runnable);
+    }
+
+    /**
+     * Registers a hook spanning several chunks, such as one filling every chest of a structure. It
+     * runs once, when the last chunk it covers has been generated, so that it never sees only half
+     * of what it is meant to populate.
+     */
+    public void addHook(LongCollection chunkHashes, Runnable runnable) {
+        LongOpenHashSet distinct = new LongOpenHashSet(chunkHashes);
+        if (distinct.isEmpty()) {
+            this.addHook(runnable);
+            return;
+        }
+        AtomicInteger remaining = new AtomicInteger(distinct.size());
+        for (long chunkHash : distinct) {
+            this.chunkHooks.computeIfAbsent(chunkHash, k -> new ObjectArrayList<>()).add(() -> {
+                if (remaining.decrementAndGet() == 0) {
+                    runnable.run();
+                }
+            });
+        }
+    }
+
+    /**
+     * Collects the chunks covered by the given positions, to bind a hook to all of them.
+     *
+     * @see #addHook(LongCollection, Runnable)
+     */
+    public static LongOpenHashSet chunkHashesOfPositions(Collection<BlockVector3> positions) {
+        LongOpenHashSet hashes = new LongOpenHashSet();
+        for (BlockVector3 pos : positions) {
+            hashes.add(Level.chunkHash(pos.getX() >> 4, pos.getZ() >> 4));
+        }
+        return hashes;
+    }
+
+    /**
+     * @see #chunkHashesOfPositions(Collection)
+     */
+    public static LongOpenHashSet chunkHashesOfBlocks(Collection<Block> blocks) {
+        LongOpenHashSet hashes = new LongOpenHashSet();
+        for (Block block : blocks) {
+            hashes.add(Level.chunkHash(block.getChunkX(), block.getChunkZ()));
+        }
+        return hashes;
     }
 
     public ObjectOpenHashSet<Runnable> getHooks() {
@@ -284,6 +347,14 @@ public class BlockManager {
         for (var entry : manager.chunkHooks.long2ObjectEntrySet()) {
             this.chunkHooks.computeIfAbsent(entry.getLongKey(), k -> new ObjectArrayList<>()).addAll(entry.getValue());
         }
+    }
+
+    /**
+     * Carries over another manager's hooks, the positioned ones included, without touching blocks.
+     */
+    public void mergeHooks(BlockManager manager) {
+        this.hooks.addAll(manager.getHooks());
+        this.mergeChunkHooks(manager);
     }
 
     public Level getLevel() {
