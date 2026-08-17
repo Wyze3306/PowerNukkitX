@@ -100,6 +100,14 @@ public class InventoryTransactionHandler implements PacketHandler<InventoryTrans
             } finally {
                 player.clearLastUsedItem();
             }
+        } else if (packet.getTransaction().getType().equals(InventoryTransactionDataType.MISMATCH)) {
+            // Le client annonce que son inventaire ne correspond plus au nôtre et
+            // attend qu'on le lui renvoie. Sans réponse il reste sur ce constat et
+            // refuse toute manipulation : plus une seule requête n'est émise, et
+            // l'écran paraît simplement figé. Rien à valider ici, le renvoi est
+            // toute la réponse attendue.
+            log.debug("Inventory mismatch reported by {}, resyncing", player.getName());
+            player.sendAllInventories();
         } else if (packet.getTransaction().getType().equals(InventoryTransactionDataType.NORMAL)) {
             // looks like an action index swap for u3
             if (packet.getTransaction().getActions().getActions().size() == 2 &&
