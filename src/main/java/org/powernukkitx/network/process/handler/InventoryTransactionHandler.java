@@ -62,6 +62,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class InventoryTransactionHandler implements PacketHandler<InventoryTransactionPacket> {
 
+    private static final long MISMATCH_RESYNC_COOLDOWN_MS = 2000L;
+
     @Override
     public void handle(InventoryTransactionPacket packet, PlayerSessionHolder holder, Server server) {
         final PlayerHandle playerHandle = holder.getPlayerHandle();
@@ -102,10 +104,19 @@ public class InventoryTransactionHandler implements PacketHandler<InventoryTrans
             }
         } else if (packet.getTransaction().getType().equals(InventoryTransactionDataType.MISMATCH)) {
             // Le client annonce que son inventaire ne correspond plus au nôtre et
-            // attend qu'on le lui renvoie. Sans réponse il reste sur ce constat et
-            // refuse toute manipulation : plus une seule requête n'est émise, et
-            // l'écran paraît simplement figé. Rien à valider ici, le renvoi est
-            // toute la réponse attendue.
+            // attend qu'on le lui renvoie.
+            //
+            // Le renvoi est plafonné parce qu'un client qui refuse aussi le
+            // contenu renvoyé redéclare aussitôt : répondre à chaque fois monte
+            // une boucle à plusieurs dizaines d'allers-retours par seconde, où
+            // chaque mismatch coûte quatre paquets. Un désaccord persistant doit
+            // rester un désaccord, pas devenir une tempête.
+            long now = System.currentTimeMillis();
+            if (now - playerHandle.getLastInventoryMismatchResync() < MISMATCH_RESYNC_COOLDOWN_MS) {
+                log.debug("Inventory mismatch reported by {} again, resync on cooldown", player.getName());
+                return;
+            }
+            playerHandle.setLastInventoryMismatchResync(now);
             log.debug("Inventory mismatch reported by {}, resyncing", player.getName());
             player.sendAllInventories();
         } else if (packet.getTransaction().getType().equals(InventoryTransactionDataType.NORMAL)) {

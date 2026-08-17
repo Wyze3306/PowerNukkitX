@@ -36,11 +36,26 @@ public final class PlayerHandle {
     public final @NotNull Player player;
     public final @NotNull PacketRateLimiter packetRateLimiter;
 
+    /**
+     * Dernier renvoi d'inventaire consenti à un désaccord signalé par le client.
+     * Porté par la session : l'instance vit du login à la déconnexion.
+     */
+    private long lastInventoryMismatchResync;
+
     public PlayerHandle(@NotNull Player player) {
         this.player = player;
         this.packetRateLimiter = new PacketRateLimiter(
-                Server.getInstance().getSettings().networkSettings().rateLimitSettings()
+                Server.getInstance().getSettings().networkSettings().rateLimitSettings(),
+                this::getUsername
         );
+    }
+
+    public long getLastInventoryMismatchResync() {
+        return this.lastInventoryMismatchResync;
+    }
+
+    public void setLastInventoryMismatchResync(long lastInventoryMismatchResync) {
+        this.lastInventoryMismatchResync = lastInventoryMismatchResync;
     }
 
     public void forceSendEmptyChunks() {
