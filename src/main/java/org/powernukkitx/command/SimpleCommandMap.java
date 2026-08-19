@@ -360,6 +360,10 @@ public class SimpleCommandMap implements CommandMap {
     }
 
     private static ArrayList<String> parseArguments(String cmdLine, boolean groupSquareBrackets) {
+        // Quotes are dropped by appending only the kept characters to a separate buffer. Deleting
+        // them in place instead made every quote shift the whole tail down by one, so a command line
+        // of N quotes cost O(N^2): a client could freeze the tick thread for seconds with a single
+        // CommandRequestPacket, which compresses ~1000:1 on the wire.
         StringBuilder out = new StringBuilder(cmdLine.length());
         ArrayList<String> args = new ArrayList<>();
         boolean notQuoted = true;
@@ -369,6 +373,7 @@ public class SimpleCommandMap implements CommandMap {
 
         for (int pos = 0; pos < cmdLine.length(); pos++) {
             char c = cmdLine.charAt(pos);
+            // Index this character takes in the buffer, which holds everything kept so far.
             int i = out.length();
             out.append(c);
 

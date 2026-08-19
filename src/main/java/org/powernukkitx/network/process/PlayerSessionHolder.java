@@ -84,6 +84,9 @@ public class PlayerSessionHolder {
     private long packetCounterForTicks;
     @Getter(AccessLevel.PRIVATE)
     @Setter(AccessLevel.PRIVATE)
+    private long packetsDroppedForTicks;
+    @Getter(AccessLevel.PRIVATE)
+    @Setter(AccessLevel.PRIVATE)
     private long lastWarnTime;
     private InternalPackManager internalPackManager;
 
@@ -126,15 +129,21 @@ public class PlayerSessionHolder {
                 return false;
             }
             if (this.packetCounterForTicks > this.rateLimitSettings.maxPacketsPerTick()) {
+                // Counted across the silence too, otherwise the line only showed the tick it happened
+                // to be printed on and a client saturating every tick looked the same as one that
+                // overshot once.
+                this.packetsDroppedForTicks++;
                 if (now - this.lastWarnTime >= WARN_TIME_INTERVAL_IN_MS) {
                     log.warn(
-                        "{}: exceeded the limit for the maximum packets per tick (limit: {}, received: {}, excess: {}) ",
+                        "{}: exceeded the limit for the maximum packets per tick (limit: {}, received: {}, excess: {}, dropped since the last report: {}) ",
                         this.player != null ? this.player.getName() : this.session.getSocketAddress(),
                         this.rateLimitSettings.maxPacketsPerTick(),
                         this.packetCounterForTicks,
-                        this.packetCounterForTicks - this.rateLimitSettings.maxPacketsPerTick()
+                        this.packetCounterForTicks - this.rateLimitSettings.maxPacketsPerTick(),
+                        this.packetsDroppedForTicks
                     );
                     this.lastWarnTime = now;
+                    this.packetsDroppedForTicks = 0L;
                 }
                 return false;
             }

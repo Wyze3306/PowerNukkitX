@@ -20,6 +20,8 @@ public class RakNetSettings extends OkaeriConfig {
     int flushInterval = 10;
     @Comment("pnx.settings.network.raknet.maxqueuedbytes")
     int maxQueuedBytes = 67108864;
+    @Comment("pnx.settings.network.raknet.sessiontimeout")
+    long sessionTimeout = 60000;
     @Comment("pnx.settings.network.raknet.cookiemode")
     String cookieMode = "ACTIVE";
 }
