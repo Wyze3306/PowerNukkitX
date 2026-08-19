@@ -41,6 +41,8 @@ public class NetworkSettings extends OkaeriConfig {
     int flushInterval = 10;
     @Comment("pnx.settings.network.maxqueuedbytes")
     int maxQueuedBytes = 67108864;
+    @Comment("pnx.settings.network.sessiontimeout")
+    long sessionTimeout = 60000;
     @Comment("pnx.settings.network.cookiemode")
     String cookieMode = "ACTIVE";
 

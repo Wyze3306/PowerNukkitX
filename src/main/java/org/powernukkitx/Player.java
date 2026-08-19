@@ -165,6 +165,7 @@ import org.powernukkitx.network.PacketTrace;
 import org.powernukkitx.network.primitiveshape.PrimitiveShapes;
 import org.powernukkitx.network.process.PacketHandler;
 import org.powernukkitx.network.process.auth.ClientChainData;
+import org.powernukkitx.network.security.DeniedPacketLog;
 import org.powernukkitx.permission.PermissibleBase;
 import org.powernukkitx.permission.Permission;
 import org.powernukkitx.permission.PermissionAttachment;
@@ -329,6 +330,12 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
      * drained in arrival order at the start of {@link #onUpdate}. See {@link #handlePacket}.
      */
     protected final Queue<BedrockPacket> inboundPackets = PlatformDependent.newMpscQueue();
+    /**
+     * Counts the inbound packets rejected as malformed, so a client repeating one stays visible while
+     * the rejection itself keeps to debug. See {@link #drainInboundPackets}.
+     */
+    private final DeniedPacketLog rejectedInboundPackets =
+            new DeniedPacketLog("inbound packets as malformed", 100, this::getName);
     private Consumer<BedrockPacket> inboundProcessor;
     protected volatile String pendingClose;
     private final AtomicReference<Locale> locale = new AtomicReference<>(null);
@@ -1232,7 +1239,11 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             try {
                 processor.accept(packet);
             } catch (IllegalArgumentException | IllegalStateException | IndexOutOfBoundsException e) {
+                // One malformed packet is routine and stays at debug, since a client can send them as
+                // fast as it likes. The counter is what makes a client that keeps hitting the same
+                // rejection - a loop, or a probe walking a handler's bounds - visible without it.
                 log.debug("Rejected inbound packet {} for player {}: {}", packet.getClass().getSimpleName(), this.getName(), e.getMessage());
+                this.rejectedInboundPackets.record(e.getClass().getSimpleName() + " on " + packet.getClass().getSimpleName());
             } catch (Exception e) {
                 log.error("Error handling inbound packet {} for player {}", packet.getClass().getSimpleName(), this.getName(), e);
             }

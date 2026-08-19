@@ -147,6 +147,20 @@ public class Network implements NetworkInterface {
             .childOption(RakChannelOption.RAK_AUTO_FLUSH, net.autoFlush())
             .childOption(RakChannelOption.RAK_FLUSH_INTERVAL, net.flushInterval())
             .childOption(RakChannelOption.RAK_MAX_QUEUED_BYTES, net.maxQueuedBytes())
+            // RakNet coupe une session restée muette trop longtemps, et son
+            // défaut est de dix secondes. Ce délai n'est pas un budget de
+            // patience réseau : c'est le temps que le serveur a le droit de
+            // s'arrêter. Une pause de la JVM — GC, safepoint, machine qui
+            // décroche — fige aussi les boucles Netty, donc plus un
+            // datagramme n'est daté ; toutes les sessions vieillissent
+            // ensemble et expirent ensemble. Dix secondes d'arrêt, et le
+            // serveur déconnecte l'intégralité de ses joueurs d'un coup en
+            // « Session timeout » (18/08/2026). Un hoquet ne doit pas vider
+            // le serveur : ce que l'on perd à attendre plus longtemps, c'est
+            // un fantôme immobile de plus dans le monde le temps du délai,
+            // et un joueur qui revient reprend sa place (processLogin ferme
+            // l'ancienne session).
+            .childOption(RakChannelOption.RAK_SESSION_TIMEOUT, net.sessionTimeout())
             .group(eventloopgroup)
             .childHandler(new BedrockServerInitializer() {
                 @Override
