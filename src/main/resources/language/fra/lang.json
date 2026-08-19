@@ -93,6 +93,7 @@
   "pnx.settings.chunk.lightUpdates": "Whether chunks perform light updates",
   "pnx.settings.chunk.clearTickList": "Whether to clear the tick list at the end of each tick",
   "pnx.settings.chunk.generationQueueSize": "Maximum number of terrain generation tasks executed simultaneously",
+  "pnx.settings.chunk.repairOrphanWaterlogging": "Redescend en couche 0 les liquides oubliés dans la couche supplémentaire au chargement d'un chunk. Ces positions sont invisibles côté client mais restent nageables.",
   "pnx.settings.freezearray": "Server's freeze array configuration",
   "pnx.settings.freezearray.enable": "Whether to enable the freeze array",
   "pnx.settings.player": "Server's player configuration",

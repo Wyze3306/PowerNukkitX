@@ -16,6 +16,7 @@ import org.powernukkitx.level.format.ChunkSection;
 import org.powernukkitx.level.format.IChunk;
 import org.powernukkitx.level.format.LevelConfig;
 import org.powernukkitx.level.format.LevelProvider;
+import org.powernukkitx.level.format.WaterloggingRepair;
 import org.powernukkitx.math.BlockVector3;
 import org.powernukkitx.math.BlockFace;
 import org.powernukkitx.math.Vector3;
@@ -203,6 +204,16 @@ public class LevelDBProvider implements LevelProvider {
                 }
             }
             putChunk(index, chunk);
+
+            if (Server.getInstance() == null
+                    || Server.getInstance().getSettings().chunkSettings().repairOrphanWaterlogging()) {
+                int repaired = WaterloggingRepair.repair(chunk);
+                if (repaired > 0) {
+                    chunk.setChanged();
+                    log.debug("Repaired {} orphan waterlogged position(s) in chunk ({},{}) of {}",
+                            repaired, chunkX, chunkZ, this.getName());
+                }
+            }
 
             Level level = this.getLevel();
             restoreBlockTicks(level, chunk);

@@ -225,12 +225,26 @@ public abstract class BlockLiquid extends BlockTransparent {
         return 1;
     }
 
+    /**
+     * Layer 1 only ever holds a liquid as the water half of a waterlogged block. Left
+     * orphaned there — layer 0 being air, or a block that cannot be waterlogged — the
+     * Bedrock client does not draw it but still treats it as liquid: invisible water
+     * that players swim in, saved to the world like any other block.
+     * <p>
+     * Keeping the two layers consistent is a matter of state validity, not of flow, so
+     * this must also run when {@code enableLiquidFlow} is off. Otherwise every block
+     * placed in water (which moves the water to layer 1) leaves a ghost behind once
+     * that block is broken.
+     *
+     * @return {@code true} if layer 1 held an orphan liquid and was normalised
+     */
     public static boolean normalizeWaterloggedLayer(Level level, int x, int y, int z) {
         if (!(level.getBlock(x, y, z, 1) instanceof BlockLiquid liquid)) {
             return false;
         }
         Block layer0 = level.getBlock(x, y, z, 0);
         if (layer0.isAir()) {
+            // The host block is gone: the liquid belongs in layer 0, where it renders.
             level.setBlock(x, y, z, 1, Block.get(BlockID.AIR), false, false);
             level.setBlock(x, y, z, 0, liquid, false, false);
             return true;
@@ -247,7 +261,7 @@ public abstract class BlockLiquid extends BlockTransparent {
     public int onUpdate(int type) {
         if (type == Level.BLOCK_UPDATE_NORMAL && layer > 0
                 && normalizeWaterloggedLayer(this.level, getFloorX(), getFloorY(), getFloorZ())) {
-            return 0;
+            return 0;//this instance no longer describes what sits at that position
         }
         if (!this.level.getGameplaySettings().enableLiquidFlow()) {
             return 0;
