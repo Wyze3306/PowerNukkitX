@@ -3284,6 +3284,17 @@ public class Level implements Metadatable {
 
         blockPrevious.afterRemoval(block, update);
 
+        // A liquid stranded in layer 1 is invisible client-side but still swimmable, and
+        // the block update above only reaches it when update == true. Catch it here so
+        // explosions, plugins and any other direct write cannot leave a ghost behind.
+        // Replacing a liquid is excluded on purpose: that is setBlockAtPos moving the
+        // water it is about to build over into layer 1, and pulling it straight back
+        // down would stop anything from ever being waterlogged.
+        if (layer == 0 && !(block instanceof BlockLiquid) && !(blockPrevious instanceof BlockLiquid)
+                && chunk.getBlockState(x & 0xF, y, z & 0xF, 1) != BlockAir.STATE) {
+            BlockLiquid.normalizeWaterloggedLayer(this, x, y, z);
+        }
+
         if (block instanceof CustomBlock customBlock) {
             CustomBlockDefinition def = customBlock.getDefinition();
             if (def != null && def.tickSettings() != null) {

@@ -162,6 +162,7 @@
   "pnx.settings.chunk.checkfortickable": "Check for redstone and liquids to be ticked once at chunk load.",
   "pnx.settings.chunk.saveGenerated": "If enabled, every new generated chunk will be saved. Improves performance but world sizes will grow faster.",
   "pnx.settings.chunk.convertBDSChunks": "Enable this if your BDS imported map have invisble chests, signs, beds, etc.",
+  "pnx.settings.chunk.repairOrphanWaterlogging": "Move liquids stranded in the extra block layer back to layer 0 when a chunk is loaded. Such positions are invisible client-side but can still be swum in.",
   "pnx.settings.chunk.disableblockticking": "List for ticking disabled blocks. Example: minecraft:lava",
   "pnx.settings.network.queryplugins": "Whether the query protocol displays plugin information",
   "pnx.settings.network.compressionlevel": "Compression level of the compression algorithm used by the server",
