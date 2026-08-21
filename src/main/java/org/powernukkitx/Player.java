@@ -3082,6 +3082,15 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
      * @param packet packet to send
      */
     public void sendPacket(BedrockPacket packet) {
+        // A closed session no longer drains its send queue - BedrockPeer#onTick returns on the
+        // closed flag - and that queue is unbounded. Anything still pushed to a player whose
+        // connection is gone therefore stays in memory until the server stops, and a single
+        // player left behind in a busy world collects every broadcast aimed at it: three of them
+        // held 5.7 million packets. The reasons a player outlives its connection are bugs of
+        // their own, but none of them may cost memory.
+        if (!this.session.isConnected()) {
+            return;
+        }
         try {
             final PacketSendEvent event = new PacketSendEvent(this, packet);
             this.server.getPluginManager().callEvent(event);
@@ -3542,6 +3551,18 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             }
         }
 
+        // Checked before anything that returns early. The network thread only asks for a close
+        // here, so whatever branch skips this check keeps the player alive forever: the dead
+        // branch below always returns, and a player who lost his connection on the death screen
+        // was never closed. He stayed in Level#players with a closed peer, and every broadcast
+        // aimed at him piled up in a send queue that BedrockPeer#onTick refuses to drain.
+        if (this.pendingClose != null) {
+            final String closeReason = this.pendingClose;
+            this.pendingClose = null;
+            this.close(closeReason);
+            return true;
+        }
+
         if (!this.isAlive() && this.spawned) {
             this.drainInboundPackets();
             if (this.isAlive()) {
@@ -3565,13 +3586,6 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             // Draining may close the player synchronously (e.g. self-kick), nulling the
             // inventory; bail out before the getInventory() access below throws an NPE.
             if (!this.loggedIn) {
-                return true;
-            }
-
-            if (this.pendingClose != null) {
-                final String closeReason = this.pendingClose;
-                this.pendingClose = null;
-                this.close(closeReason);
                 return true;
             }
 

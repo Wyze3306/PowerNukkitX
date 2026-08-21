@@ -469,6 +469,14 @@ public class PlayerSessionHolder {
             this.player.setInboundProcessor(networkPacketHandler::processInbound);
         }
         Server.getInstance().onPlayerLogin((InetSocketAddress) this.session.getSocketAddress(), player);
+        if (!this.player.isConnected()) {
+            // Login refused by a plugin: Server#onPlayerLogin already closed the player and took
+            // him out of the server lists. Going on anyway woke him back up - processLogin ends in
+            // Entity#init, which puts him back into Level#players - and nothing ever took him out
+            // again, since close() cannot run twice. He stayed there for the life of the server,
+            // targeted by every broadcast, with a closed peer whose send queue is never drained.
+            return;
+        }
         this.playerHandle.processLogin();
     }
 
