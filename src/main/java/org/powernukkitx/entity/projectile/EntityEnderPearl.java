@@ -83,15 +83,17 @@ public class EntityEnderPearl extends EntityProjectile {
         // the thrower there. Stopping it on contact puts them on the surface instead, where the
         // pearl was seen to touch down. Only entering the water counts: a pearl thrown while
         // swimming starts inside it and would otherwise stop before leaving the thrower.
+        boolean stoppedByWater = false;
         if (!this.isCollided && !wasInWater && this.isTouchingWater()) {
             this.motionX = 0;
             this.motionY = 0;
             this.motionZ = 0;
             this.isCollided = true;
             this.hadCollision = true;
+            stoppedByWater = true;
         }
 
-        if (this.isCollided && this.shootingEntity instanceof Player) {
+        if (this.isCollided && this.shootingEntity instanceof Player thrower) {
             boolean portal = false;
             for (Block collided : this.getCollisionBlocks()) {
                 if (collided.getId().equals(Block.PORTAL)) {
@@ -99,7 +101,8 @@ public class EntityEnderPearl extends EntityProjectile {
                 }
             }
             if (!portal) {
-                teleportOwner(oldPosition);
+                teleportOwner(!stoppedByWater && isWedgedUnderBlock(thrower)
+                    ? getPosition() : oldPosition);
             }
         }
 
@@ -109,6 +112,41 @@ public class EntityEnderPearl extends EntityProjectile {
         }
 
         return hasUpdate;
+    }
+
+    /**
+     * Whether the thrower is wedged in a corner with a block right over their head.
+     * <p>
+     * That posture is the one case where landing them on the impact point is allowed instead of
+     * where the pearl was a tick earlier. The impact point sits flush against the surface the
+     * pearl stopped on, and a player is more than twice as wide as a pearl, so they end up
+     * straddling it - which is how one gets inside a block. Everywhere else the pearl lands them
+     * short of what it hit and nothing can be crossed.
+     * <p>
+     * A corner means blocked on both horizontal axes at head height, not a flat wall and not a
+     * corridor, so the shot has to be set up rather than stumbled into.
+     *
+     * @param thrower the player the pearl belongs to
+     * @return true if the thrower stands in such a nook
+     */
+    private boolean isWedgedUnderBlock(Player thrower) {
+        final int x = thrower.getFloorX();
+        final int y = thrower.getFloorY();
+        final int z = thrower.getFloorZ();
+
+        if (isPassable(x, y + 2, z)) {
+            return false;
+        }
+
+        final int head = y + 1;
+        final boolean alongZ = !isPassable(x, head, z - 1) || !isPassable(x, head, z + 1);
+        final boolean alongX = !isPassable(x - 1, head, z) || !isPassable(x + 1, head, z);
+        return alongZ && alongX;
+    }
+
+    private boolean isPassable(int x, int y, int z) {
+        final Block block = this.level.getBlock(x, y, z, false);
+        return block == null || block.canPassThrough();
     }
 
     @Override
