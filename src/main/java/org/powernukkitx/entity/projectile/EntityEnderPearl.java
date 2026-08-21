@@ -2,12 +2,14 @@ package org.powernukkitx.entity.projectile;
 
 import org.powernukkitx.Player;
 import org.powernukkitx.block.Block;
+import org.powernukkitx.block.BlockID;
 import org.powernukkitx.entity.Entity;
 import org.powernukkitx.event.entity.EntityDamageByEntityEvent;
 import org.powernukkitx.event.entity.EntityDamageEvent;
 import org.powernukkitx.event.player.PlayerTeleportEvent.TeleportCause;
 import org.powernukkitx.level.Position;
 import org.powernukkitx.level.format.IChunk;
+import org.powernukkitx.math.NukkitMath;
 import org.powernukkitx.math.Vector3;
 import org.powernukkitx.nbt.tag.CompoundTag;
 import org.powernukkitx.nbt.tag.DoubleTag;
@@ -101,8 +103,11 @@ public class EntityEnderPearl extends EntityProjectile {
                 }
             }
             if (!portal) {
-                teleportOwner(!stoppedByWater && isWedgedUnderBlock(thrower)
-                    ? getPosition() : oldPosition);
+                Position impact = getPosition();
+                boolean intoBlock = !stoppedByWater
+                    && isWedgedUnderBlock(thrower)
+                    && !holdsTheMapTogether(thrower, impact);
+                teleportOwner(intoBlock ? impact : oldPosition);
             }
         }
 
@@ -142,6 +147,48 @@ public class EntityEnderPearl extends EntityProjectile {
         final boolean alongZ = !isPassable(x, head, z - 1) || !isPassable(x, head, z + 1);
         final boolean alongX = !isPassable(x - 1, head, z) || !isPassable(x + 1, head, z);
         return alongZ && alongX;
+    }
+
+    /**
+     * Whether the box the thrower would occupy at that point runs into a block that is never
+     * enterable, whatever the posture that earned them the exception. Bedrock and barriers are what
+     * a map is closed with: getting inside one is getting out of the map, so the throw falls back
+     * to the ordinary landing short of what the pearl hit.
+     *
+     * @param thrower the player the pearl belongs to
+     * @param landing where they would be put down
+     * @return true if that spot is held by bedrock, invisible bedrock, a barrier or a border block
+     */
+    private boolean holdsTheMapTogether(Player thrower, Vector3 landing) {
+        final float scale = thrower.getScale();
+        final double halfWidth = thrower.getWidth() * scale / 2;
+        final double height = thrower.getHeight() * scale;
+
+        final int minX = NukkitMath.floorDouble(landing.x - halfWidth);
+        final int maxX = NukkitMath.floorDouble(landing.x + halfWidth);
+        final int minY = NukkitMath.floorDouble(landing.y);
+        final int maxY = NukkitMath.floorDouble(landing.y + height);
+        final int minZ = NukkitMath.floorDouble(landing.z - halfWidth);
+        final int maxZ = NukkitMath.floorDouble(landing.z + halfWidth);
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    final Block block = this.level.getBlock(x, y, z, false);
+                    if (block == null) {
+                        continue;
+                    }
+                    final String id = block.getId();
+                    if (BlockID.BEDROCK.equals(id)
+                        || BlockID.INVISIBLE_BEDROCK.equals(id)
+                        || BlockID.BARRIER.equals(id)
+                        || BlockID.BORDER_BLOCK.equals(id)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private boolean isPassable(int x, int y, int z) {
