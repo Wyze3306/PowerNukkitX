@@ -4777,6 +4777,28 @@ public class Level implements Metadatable {
         }
     }
 
+    /**
+     * Drops every chunk delivery still pending for a player in this level. Whatever is queued here
+     * was requested while the player was in this level; once they have left it, delivering it hands
+     * the client terrain from a world it is no longer in, at coordinates the world it moved to uses
+     * as well - so the client draws the wrong ground, and counts it as the ground it was waiting for.
+     */
+    public void cancelChunkRequests(Player player) {
+        final int loaderId = player.getLoaderId();
+        synchronized (this.chunkSendQueue) {
+            for (long index : this.chunkSendQueue.keySet()) {
+                final Int2ObjectNonBlockingMap<Player> players = this.chunkSendQueue.get(index);
+                if (players == null) {
+                    continue;
+                }
+                players.remove(loaderId);
+                if (players.isEmpty()) {
+                    this.chunkSendQueue.remove(index);
+                }
+            }
+        }
+    }
+
     public void subTick(GameLoop currentTick) {
         try {
             processChunkRequest();

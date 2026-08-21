@@ -242,6 +242,24 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
      * the teleport and answering it.
      */
     private static final double TELEPORT_ACK_DISTANCE = 2;
+    /**
+     * Longest a player may be pinned at a teleport destination waiting for the chunk under them.
+     * Only a cap for the case where that chunk never arrives: the hold normally ends within a few
+     * ticks, when the chunk is actually handed to the session.
+     */
+    private static final long GROUND_HOLD_TIMEOUT_MS = 3000L;
+    /**
+     * How far a held client may drift from its destination before it is put back. Each correction
+     * costs the player their aim, so this trades a fraction of a block of fall against a camera
+     * that stays theirs; the hold ends on an exact snap either way.
+     */
+    private static final double GROUND_HOLD_DRIFT = 0.5;
+    /**
+     * Radius, in chunks, of the area whose load is started as soon as a teleport destination is
+     * known. One chunk of margin around the destination covers a player whose box straddles a
+     * chunk border.
+     */
+    private static final int TELEPORT_WARM_RADIUS = 1;
     /// static fields
     public boolean playedBefore;
     public boolean spawned = false;
@@ -445,6 +463,16 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
      */
     private Location teleportOrigin;
     private boolean awaitingTeleportAck;
+    /**
+     * Destination the client is pinned to while the chunk under it has not reached it yet, or null.
+     * The client applies a teleport the moment it is told about it, and a client standing over a
+     * chunk it does not have falls through: by the time the terrain arrives it is metres lower, or
+     * in the void. See {@link #tickGroundHold()}.
+     */
+    private volatile Location groundHold;
+    private long groundHoldDeadline;
+    private volatile boolean groundHoldChunkSent;
+    private volatile double groundHoldDrift;
 
     private Color locatorBarColor;
     private final @NotNull PlayerInfo info;
@@ -1274,6 +1302,16 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         boolean shouldHandle = this.isAlive() && this.spawned && !this.isSleeping() && (updatePosition || updateRotation);
 
         if (!shouldHandle) {
+            return;
+        }
+
+        final Location hold = this.groundHold;
+        if (hold != null) {
+            // Everything the client reports here describes a fall through a chunk it has not
+            // received. Replaying it would put the player below the terrain that is about to
+            // arrive, which is the drop into the void this hold exists to prevent. How far it has
+            // got is still worth keeping: it is what decides whether a correction is due.
+            this.groundHoldDrift = newPosition.distanceSquared(hold);
             return;
         }
 
@@ -3006,6 +3044,12 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         this.chunkLoadCount++;
         this.sendPacket(packet);
 
+        final Location hold = this.groundHold;
+        if (hold != null && hold.getChunkX() == x && hold.getChunkZ() == z) {
+            // Released on the tick thread, not here: this runs on the level's sub-tick loop.
+            this.groundHoldChunkSent = true;
+        }
+
         if (this.spawned && this.level.getProvider() != null) {
             for (Entity entity : this.level.getChunkEntities(x, z).values()) {
                 if (this != entity && !entity.closed && entity.isAlive()) {
@@ -3793,6 +3837,8 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
                 playerChunkManager.tick();
             }
         }
+
+        tickGroundHold();
 
         if (this.chunkLoadCount >= this.spawnThreshold && !this.spawned && loggedIn) {
             this.doFirstSpawn();
@@ -5421,6 +5467,20 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             to = event.getTo();
         }
 
+        // Whether the client can already draw the ground it is about to be dropped onto. Read before
+        // anything below touches the chunk bookkeeping, and only trusted within one level: chunk
+        // hashes carry no level, so the same coordinates in the world being left would pass for the
+        // destination.
+        final boolean destinationChunkOnClient = to.getLevel() == from.getLevel()
+                && this.playerChunkManager.isSentChunk(Level.chunkHash(to.getChunkX(), to.getChunkZ()));
+
+        if (!destinationChunkOnClient) {
+            // Start the destination on its way before the rest of the teleport runs. The chunk
+            // manager asks for the same chunks a few lines down, and a provider that already holds
+            // them answers on the spot instead of costing a round trip to disk per chunk.
+            warmDestinationChunks(to);
+        }
+
         this.lastTeleportMessage = Pair.of(
                 to.clone(),
                 System.currentTimeMillis()
@@ -5446,6 +5506,7 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         boolean switchLevel = false;
         if (!to.getLevel().equals(from.getLevel())) {
             switchLevel = true;
+            from.getLevel().cancelChunkRequests(this);
             unloadAllUsedChunk();
             //unload entities for old level
             Arrays.stream(from.getLevel().getEntities()).forEach(e -> e.despawnFrom(this));
@@ -5512,8 +5573,97 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         if (isSpectator()) {
             this.setGamemode(this.gamemode, false, null, true);
         }
+        if (destinationChunkOnClient) {
+            endGroundHold(false);
+        } else {
+            beginGroundHold(to);
+        }
         this.scheduleUpdate();
         return true;
+    }
+
+    /**
+     * Starts loading the chunks around a teleport destination. Nothing waits on the result: the
+     * point is only that the disk read is already under way when the chunk manager asks for it.
+     */
+    private void warmDestinationChunks(Location destination) {
+        final Level target = destination.getLevel();
+        if (target == null) {
+            return;
+        }
+        final int chunkX = destination.getChunkX();
+        final int chunkZ = destination.getChunkZ();
+        for (int dx = -TELEPORT_WARM_RADIUS; dx <= TELEPORT_WARM_RADIUS; dx++) {
+            for (int dz = -TELEPORT_WARM_RADIUS; dz <= TELEPORT_WARM_RADIUS; dz++) {
+                if (target.isChunkLoaded(chunkX + dx, chunkZ + dz)) {
+                    continue;
+                }
+                try {
+                    target.getChunkAsync(chunkX + dx, chunkZ + dz);
+                } catch (Throwable e) {
+                    log.debug("Could not warm chunk ({}, {}) for {}", chunkX + dx, chunkZ + dz, this.getName(), e);
+                }
+            }
+        }
+    }
+
+    /**
+     * Pins the player to a teleport destination until the client has the chunk it stands in.
+     *
+     * @param destination the place the client was just told to move to
+     */
+    private void beginGroundHold(Location destination) {
+        if (!this.spawned || destination.getLevel() == null) {
+            return;
+        }
+        this.groundHold = destination.clone();
+        this.groundHoldChunkSent = false;
+        this.groundHoldDrift = 0d;
+        this.groundHoldDeadline = System.currentTimeMillis() + GROUND_HOLD_TIMEOUT_MS;
+    }
+
+    /**
+     * @param snap whether to put the client back on the destination it may have fallen away from
+     */
+    private void endGroundHold(boolean snap) {
+        final Location hold = this.groundHold;
+        this.groundHold = null;
+        this.groundHoldChunkSent = false;
+        if (hold == null) {
+            return;
+        }
+        this.resetFallDistance();
+        if (!snap) {
+            return;
+        }
+        // The client fell for as long as it took the chunk to arrive, and the positions describing
+        // that fall are still on their way here. Treat the correction as a teleport of its own so
+        // they are discarded rather than replayed as a drop the player never made.
+        this.lastTeleportMessage = Pair.of(hold.clone(), System.currentTimeMillis());
+        this.teleportOrigin = null;
+        this.awaitingTeleportAck = true;
+        this.sendPosition(hold, hold.getYaw(), hold.getPitch(), PositionMode.TELEPORT);
+    }
+
+    /**
+     * Holds a just-teleported player in place until the chunk under them reaches the client.
+     * Corrections are only sent once the client has actually left the destination: a client that
+     * waits for its terrain instead of falling through it keeps its camera to itself.
+     */
+    private void tickGroundHold() {
+        final Location hold = this.groundHold;
+        if (hold == null) {
+            return;
+        }
+        if (this.groundHoldChunkSent || System.currentTimeMillis() >= this.groundHoldDeadline) {
+            endGroundHold(true);
+            return;
+        }
+        this.resetFallDistance();
+        if (this.groundHoldDrift > GROUND_HOLD_DRIFT * GROUND_HOLD_DRIFT) {
+            this.groundHoldDrift = 0d;
+            this.sendPosition(hold.add(0, 0.00001, 0), hold.getYaw(), hold.getPitch(), PositionMode.RESPAWN);
+        }
     }
 
     public void refreshChunkRender() {
@@ -6044,6 +6194,7 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             return false;
         }
 
+        oldLevel.cancelChunkRequests(this);
         this.clientMovements.clear();
 
         long[] oldChunks;
@@ -6111,6 +6262,9 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
     public boolean switchLevel(Level level) {
         Level oldLevel = this.level;
         if (super.switchLevel(level)) {
+            if (oldLevel != null) {
+                oldLevel.cancelChunkRequests(this);
+            }
             this.clientMovements.clear();
             Position spawn = level.getSpawnLocation();
             final SetSpawnPositionPacket packet = new SetSpawnPositionPacket();
