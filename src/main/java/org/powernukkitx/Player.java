@@ -6119,6 +6119,17 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         }
     }
 
+    /**
+     * Player UI inventories whose content is lost on death, on top of the main and offhand inventories.
+     * <p>
+     * What sits there belongs to the player and is not persistent storage, so it must be dropped like the rest:
+     * {@link #resetInventory()} otherwise hands it straight back at respawn, and anything parked in the 2x2 grid,
+     * on the cursor or in an open crafting grid survives the death.
+     * <p>
+     * Only crafting grids are taken from the open window, never a craft-looking inventory that is backed by a world
+     * block ({@link CrafterInventory}) or by a plugin menu: emptying those would destroy content that is not the
+     * dead player's.
+     */
     private List<Inventory> getInventoriesDroppedOnDeath() {
         List<Inventory> inventories = new ArrayList<>(3);
         if (this.craftingGridInventory != null) {
