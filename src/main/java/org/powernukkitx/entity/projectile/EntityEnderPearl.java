@@ -27,10 +27,10 @@ public class EntityEnderPearl extends EntityProjectile {
      */
     private static final double WALL_CONTACT_MARGIN = 0.1;
     /**
-     * Fractions of its last step the pearl is followed back down when the thrower fits nowhere
-     * around its landing. One whole step back is where it was two ticks before it stopped.
+     * How far back along its own flight the pearl is followed when the thrower does not fit where
+     * it stopped, as fractions of the step it just took.
      */
-    private static final double[] BACKTRACK_STEPS = {0.25, 0.5, 0.75, 1};
+    private static final double[] BACKTRACK_FRACTIONS = {0.25, 0.5, 0.75, 1};
 
     @Override
     @NotNull
@@ -139,44 +139,51 @@ public class EntityEnderPearl extends EntityProjectile {
      * pearl held a tick earlier is not always one the thrower fits in: a pearl sent up along the
      * seam of a corner leaves it hard against both walls, and a player put down there straddles
      * them. The client resolves that overlap by pushing them inside, which hands out the block
-     * entry that is supposed to be reserved to a thrower wedged under a block.
+     * entry that is meant to be reserved to a thrower wedged under a block.
      * <p>
-     * Centring them in the column they land in is the whole correction, and it only ever runs when
-     * the spot is genuinely taken - a landing with room around it is returned untouched, so a
-     * normal throw still puts the thrower exactly where the pearl was.
+     * So the point is only kept when the thrower has room in it. Otherwise the search walks back
+     * out along the line the pearl flew in on - ground it has just crossed, so nothing can be
+     * traversed by following it - trying the middle of each column on the way. A landing with room
+     * around it is returned untouched, which is every ordinary throw.
      *
-     * @param thrower the player the pearl belongs to
-     * @param landing where the pearl would ordinarily put them down
-     * @param travel  the step the pearl was flying when it stopped
-     * @return that same point, or the nearest one along its own flight that holds the thrower
+     * @param thrower  the player the pearl belongs to
+     * @param landing  where the pearl would ordinarily put them down
+     * @param approach the pearl's velocity coming in
+     * @return a point with room for the thrower, or null to leave them where they are
      */
-    private Vector3 clearOfWalls(Player thrower, Position landing, Vector3 travel) {
-        if (!overlapsBlocks(thrower, landing)) {
-            return landing;
+    private Vector3 clearOfWalls(Player thrower, Position landing, Vector3 approach) {
+        Vector3 room = roomAround(thrower, landing);
+        if (room != null) {
+            return room;
         }
 
-        final Vector3 centred = new Vector3(
-            NukkitMath.floorDouble(landing.x) + 0.5,
-            landing.y,
-            NukkitMath.floorDouble(landing.z) + 0.5);
-        if (!overlapsBlocks(thrower, centred)) {
-            return centred;
-        }
-
-        // Centring only frees a column that is clear over the thrower's whole height, which a
-        // pearl sent up the seam of a corner is not: it stops between the blocks, and they fill
-        // the column above its landing. Backing down its own flight is what gets out of there -
-        // the pearl came through those points, so they are clear of what it ran into.
-        for (double back : BACKTRACK_STEPS) {
-            final Vector3 earlier = new Vector3(
-                landing.x - travel.x * back,
-                landing.y - travel.y * back,
-                landing.z - travel.z * back);
-            if (!overlapsBlocks(thrower, earlier)) {
-                return earlier;
+        for (double back : BACKTRACK_FRACTIONS) {
+            room = roomAround(thrower, new Vector3(
+                landing.x - approach.x * back,
+                landing.y - approach.y * back,
+                landing.z - approach.z * back));
+            if (room != null) {
+                return room;
             }
         }
-        return landing;
+
+        // Nothing along the way back holds a player: better no teleport at all than one that ends
+        // inside a wall, which is exactly the move this is here to refuse.
+        return null;
+    }
+
+    /**
+     * That point if the thrower fits in it, else the middle of its column if that one does, else
+     * null. Centring is what unhooks a landing merely pressed against a wall, without moving it
+     * off the block the pearl came down on.
+     */
+    private Vector3 roomAround(Player thrower, Vector3 point) {
+        if (!overlapsBlocks(thrower, point)) {
+            return point;
+        }
+        final Vector3 centred = new Vector3(
+            NukkitMath.floorDouble(point.x) + 0.5, point.y, NukkitMath.floorDouble(point.z) + 0.5);
+        return overlapsBlocks(thrower, centred) ? null : centred;
     }
 
     /**
@@ -283,6 +290,9 @@ public class EntityEnderPearl extends EntityProjectile {
     }
 
     private void teleportOwner(Vector3 destination) {
+        if (destination == null) {
+            return;
+        }
         if (!this.level.equals(this.shootingEntity.getLevel())) {
             return;
         }
