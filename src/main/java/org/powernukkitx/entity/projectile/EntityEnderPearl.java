@@ -26,6 +26,11 @@ public class EntityEnderPearl extends EntityProjectile {
      * sinking a fifth of a block into one, as a pearl-width landing against a corner does, is.
      */
     private static final double WALL_CONTACT_MARGIN = 0.1;
+    /**
+     * Fractions of its last step the pearl is followed back down when the thrower fits nowhere
+     * around its landing. One whole step back is where it was two ticks before it stopped.
+     */
+    private static final double[] BACKTRACK_STEPS = {0.25, 0.5, 0.75, 1};
 
     @Override
     @NotNull
@@ -85,6 +90,7 @@ public class EntityEnderPearl extends EntityProjectile {
             return false;
         }
         Position oldPosition = getPosition();
+        Vector3 travel = getMotion();
         boolean wasInWater = this.isTouchingWater();
         boolean hasUpdate = super.onUpdate(currentTick);
 
@@ -114,7 +120,7 @@ public class EntityEnderPearl extends EntityProjectile {
                 boolean intoBlock = !stoppedByWater
                     && isWedgedUnderBlock(thrower)
                     && !holdsTheMapTogether(thrower, impact);
-                teleportOwner(intoBlock ? impact : clearOfWalls(thrower, oldPosition));
+                teleportOwner(intoBlock ? impact : clearOfWalls(thrower, oldPosition, travel));
             }
         }
 
@@ -141,9 +147,10 @@ public class EntityEnderPearl extends EntityProjectile {
      *
      * @param thrower the player the pearl belongs to
      * @param landing where the pearl would ordinarily put them down
-     * @return that same point, or the middle of its column when it is against a wall
+     * @param travel  the step the pearl was flying when it stopped
+     * @return that same point, or the nearest one along its own flight that holds the thrower
      */
-    private Vector3 clearOfWalls(Player thrower, Position landing) {
+    private Vector3 clearOfWalls(Player thrower, Position landing, Vector3 travel) {
         if (!overlapsBlocks(thrower, landing)) {
             return landing;
         }
@@ -152,7 +159,24 @@ public class EntityEnderPearl extends EntityProjectile {
             NukkitMath.floorDouble(landing.x) + 0.5,
             landing.y,
             NukkitMath.floorDouble(landing.z) + 0.5);
-        return overlapsBlocks(thrower, centred) ? landing : centred;
+        if (!overlapsBlocks(thrower, centred)) {
+            return centred;
+        }
+
+        // Centring only frees a column that is clear over the thrower's whole height, which a
+        // pearl sent up the seam of a corner is not: it stops between the blocks, and they fill
+        // the column above its landing. Backing down its own flight is what gets out of there -
+        // the pearl came through those points, so they are clear of what it ran into.
+        for (double back : BACKTRACK_STEPS) {
+            final Vector3 earlier = new Vector3(
+                landing.x - travel.x * back,
+                landing.y - travel.y * back,
+                landing.z - travel.z * back);
+            if (!overlapsBlocks(thrower, earlier)) {
+                return earlier;
+            }
+        }
+        return landing;
     }
 
     /**
@@ -253,7 +277,7 @@ public class EntityEnderPearl extends EntityProjectile {
     @Override
     public void onCollideWithEntity(Entity entity) {
         if (this.shootingEntity instanceof Player thrower) {
-            teleportOwner(clearOfWalls(thrower, getPosition()));
+            teleportOwner(clearOfWalls(thrower, getPosition(), getMotion()));
         }
         super.onCollideWithEntity(entity);
     }
