@@ -10,6 +10,7 @@ import org.powernukkitx.event.player.PlayerTeleportEvent.TeleportCause;
 import org.powernukkitx.level.Position;
 import org.powernukkitx.level.format.IChunk;
 import org.powernukkitx.math.NukkitMath;
+import org.powernukkitx.math.SimpleAxisAlignedBB;
 import org.powernukkitx.math.Vector3;
 import org.powernukkitx.nbt.tag.CompoundTag;
 import org.powernukkitx.nbt.tag.DoubleTag;
@@ -19,6 +20,12 @@ import org.cloudburstmc.protocol.bedrock.data.LevelEvent;
 import org.jetbrains.annotations.NotNull;
 
 public class EntityEnderPearl extends EntityProjectile {
+
+    /**
+     * Overlap tolerated before a landing counts as taken. Brushing an edge is not being in a wall;
+     * sinking a fifth of a block into one, as a pearl-width landing against a corner does, is.
+     */
+    private static final double WALL_CONTACT_MARGIN = 0.1;
 
     @Override
     @NotNull
@@ -107,7 +114,7 @@ public class EntityEnderPearl extends EntityProjectile {
                 boolean intoBlock = !stoppedByWater
                     && isWedgedUnderBlock(thrower)
                     && !holdsTheMapTogether(thrower, impact);
-                teleportOwner(intoBlock ? impact : oldPosition);
+                teleportOwner(intoBlock ? impact : clearOfWalls(thrower, oldPosition));
             }
         }
 
@@ -117,6 +124,53 @@ public class EntityEnderPearl extends EntityProjectile {
         }
 
         return hasUpdate;
+    }
+
+    /**
+     * The ordinary landing, kept clear of the walls around it.
+     * <p>
+     * A pearl is a quarter of a block wide and a player is more than twice that, so the point the
+     * pearl held a tick earlier is not always one the thrower fits in: a pearl sent up along the
+     * seam of a corner leaves it hard against both walls, and a player put down there straddles
+     * them. The client resolves that overlap by pushing them inside, which hands out the block
+     * entry that is supposed to be reserved to a thrower wedged under a block.
+     * <p>
+     * Centring them in the column they land in is the whole correction, and it only ever runs when
+     * the spot is genuinely taken - a landing with room around it is returned untouched, so a
+     * normal throw still puts the thrower exactly where the pearl was.
+     *
+     * @param thrower the player the pearl belongs to
+     * @param landing where the pearl would ordinarily put them down
+     * @return that same point, or the middle of its column when it is against a wall
+     */
+    private Vector3 clearOfWalls(Player thrower, Position landing) {
+        if (!overlapsBlocks(thrower, landing)) {
+            return landing;
+        }
+
+        final Vector3 centred = new Vector3(
+            NukkitMath.floorDouble(landing.x) + 0.5,
+            landing.y,
+            NukkitMath.floorDouble(landing.z) + 0.5);
+        return overlapsBlocks(thrower, centred) ? landing : centred;
+    }
+
+    /**
+     * Whether the thrower, standing at that point, runs into the blocks around it. The margin
+     * keeps a box that merely brushes an edge out of it: only a real overlap counts, the kind that
+     * leaves a player straddling a wall.
+     */
+    private boolean overlapsBlocks(Player thrower, Vector3 at) {
+        final float scale = thrower.getScale();
+        final double halfWidth = thrower.getWidth() * scale / 2 - WALL_CONTACT_MARGIN;
+        final double height = thrower.getHeight() * scale - WALL_CONTACT_MARGIN;
+        if (halfWidth <= 0 || height <= 0) {
+            return false;
+        }
+
+        return this.level.hasCollision(thrower, new SimpleAxisAlignedBB(
+            at.x - halfWidth, at.y + WALL_CONTACT_MARGIN, at.z - halfWidth,
+            at.x + halfWidth, at.y + height, at.z + halfWidth), false);
     }
 
     /**
@@ -198,8 +252,8 @@ public class EntityEnderPearl extends EntityProjectile {
 
     @Override
     public void onCollideWithEntity(Entity entity) {
-        if (this.shootingEntity instanceof Player) {
-            teleportOwner(getPosition());
+        if (this.shootingEntity instanceof Player thrower) {
+            teleportOwner(clearOfWalls(thrower, getPosition()));
         }
         super.onCollideWithEntity(entity);
     }
