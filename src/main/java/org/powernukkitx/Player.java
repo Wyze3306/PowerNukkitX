@@ -170,6 +170,7 @@ import org.powernukkitx.network.primitiveshape.PrimitiveShapes;
 import org.powernukkitx.network.process.PacketHandler;
 import org.powernukkitx.network.process.auth.ClientChainData;
 import org.powernukkitx.network.security.DeniedPacketLog;
+import org.powernukkitx.network.security.PacketRateLimiter;
 import org.powernukkitx.permission.PermissibleBase;
 import org.powernukkitx.permission.Permission;
 import org.powernukkitx.permission.PermissionAttachment;
@@ -348,16 +349,61 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
     private final float movementDistanceThreshold;
     protected final Queue<Location> clientMovements = PlatformDependent.newMpscQueue(4);
     /**
+     * How many inbound packets may wait for the tick thread before the rest are dropped.
+     * <p>
+     * The queue used to be unbounded, which turned every source of main thread pressure into the
+     * same failure: a tick that runs long lets the queue grow, the whole backlog is then handled
+     * inside the next tick, which runs longer still, and the server converges on holding a tick
+     * open forever while the heap fills with packets nobody will ever act on. Bounding it puts a
+     * ceiling on both, and a client that reaches the ceiling is a client whose packets no longer
+     * describe anything current anyway.
+     * <p>
+     * Sized well above what a session can legitimately have in flight - the inbound limiter caps
+     * arrivals at {@code maxPacketsPerTick} per 50 ms - so reaching it means a flood, not a hitch.
+     */
+    private static final int INBOUND_QUEUE_CAPACITY = 2048;
+    /**
+     * How long the backlog warning stays silent after printing, in milliseconds.
+     */
+    private static final long INBOUND_BACKLOG_REPORT_INTERVAL_MILLIS = 10_000L;
+    /**
+     * How deep the backlog has to be after a drain before it is worth a line.
+     */
+    private static final int INBOUND_BACKLOG_REPORT_THRESHOLD = INBOUND_QUEUE_CAPACITY / 4;
+    /**
      * Inbound packets handed off from the netty thread to be dispatched on the main tick thread,
      * drained in arrival order at the start of {@link #onUpdate}. See {@link #handlePacket}.
      */
-    protected final Queue<BedrockPacket> inboundPackets = PlatformDependent.newMpscQueue();
+    protected final Queue<BedrockPacket> inboundPackets = PlatformDependent.newMpscQueue(INBOUND_QUEUE_CAPACITY);
+    /**
+     * Counts the inbound packets dropped because the queue was full, so a session that outruns the
+     * tick thread is named once rather than per packet. See {@link #handlePacket}.
+     */
+    private final DeniedPacketLog droppedInboundPackets =
+            new DeniedPacketLog("inbound packets with a full queue", 100, this::describeForRateLimit);
+    /**
+     * Counts the block actions rejected for naming a position nowhere near the player. See
+     * {@code PlayerAuthInputHandler}.
+     */
+    private final DeniedPacketLog unreachableBlockActions =
+            new DeniedPacketLog("block actions out of reach", 100, this::describeForRateLimit);
+    private long lastInboundBacklogReportMillis;
     /**
      * Counts the inbound packets rejected as malformed, so a client repeating one stays visible while
      * the rejection itself keeps to debug. See {@link #drainInboundPackets}.
      */
     private final DeniedPacketLog rejectedInboundPackets =
             new DeniedPacketLog("inbound packets as malformed", 100, this::getName);
+    /**
+     * The inbound limiters for this player, one set for the whole session.
+     * <p>
+     * Owned here rather than by {@link PlayerHandle} because a handle is cheap and gets built
+     * wherever one is needed - once per packet on the auth input path. A limiter per handle meant
+     * every one of those started with a full bucket, so the categories checked through a fresh
+     * handle enforced nothing at all, and the counters that were supposed to show a client leaning
+     * on them were thrown away before they could reach the threshold to print.
+     */
+    private final PacketRateLimiter packetRateLimiter;
     private Consumer<BedrockPacket> inboundProcessor;
     protected volatile String pendingClose;
     private final AtomicReference<Locale> locale = new AtomicReference<>(null);
@@ -541,6 +587,33 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         this.locatorBarColor = new Color(Utils.rand(0, 255), Utils.rand(0, 255), Utils.rand(0, 255));
         this.rotationUpdateThreshold = this.server.getSettings().playerSettings().rotationUpdateThreshold();
         this.movementDistanceThreshold = this.server.getSettings().playerSettings().movementDistanceThreshold();
+        this.packetRateLimiter = new PacketRateLimiter(
+                this.server.getSettings().networkSettings().rateLimitSettings(), this::describeForRateLimit);
+    }
+
+    /**
+     * Counts one block action dropped for being out of reach, remembering which kind it was.
+     *
+     * @param cause the action type, so the summary says what the client was pretending to do
+     */
+    void recordUnreachableBlockAction(String cause) {
+        this.unreachableBlockActions.record(cause);
+    }
+
+    /**
+     * @return this player's inbound packet limiters, shared by every {@link PlayerHandle} built for
+     * him so that a category's budget and its denial counter span the session
+     */
+    public @NotNull PacketRateLimiter getPacketRateLimiter() {
+        return this.packetRateLimiter;
+    }
+
+    /**
+     * Names this player the way the connection lines do, so a summary of what he got denied can be
+     * matched against his joins and leaves and acted on. Only called when a summary is printed.
+     */
+    private String describeForRateLimit() {
+        return this.getName() + "[" + this.socketAddress + "]";
     }
 
     /**
@@ -1257,17 +1330,31 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
      */
     protected void handlePacket(BedrockPacket packet) {
         if (!this.inboundPackets.offer(packet)) {
-            log.warn("Failed to enqueue inbound packet {} for player {}", packet.getClass().getSimpleName(), this.getName());
+            // Reachable at will by anyone willing to send faster than the tick thread reads, so the
+            // drop itself says nothing per packet and the counter carries who and how much.
+            this.droppedInboundPackets.record(packet.getClass().getSimpleName());
         }
     }
 
+    /**
+     * Hands this player's queued inbound packets to the tick thread, up to a budget.
+     * <p>
+     * The budget is what keeps one player's backlog from setting the length of everyone's tick.
+     * Draining to empty meant the work done here was decided by how fast a client chose to send,
+     * so a single flooding session stretched the tick for the whole server, and a tick stretched
+     * that way let the same session queue even more before the next one. Whatever does not fit
+     * stays queued in arrival order and goes first next tick - deferred, not dropped, so nothing
+     * that depends on the order of two packets sees them out of order.
+     */
     protected void drainInboundPackets() {
         final Consumer<BedrockPacket> processor = this.inboundProcessor;
         if (processor == null) {
             return;
         }
+        final int configured = this.server.getSettings().networkSettings().rateLimitSettings().maxPacketsPerTick();
+        int budget = configured > 0 ? configured : INBOUND_QUEUE_CAPACITY;
         BedrockPacket packet;
-        while ((packet = this.inboundPackets.poll()) != null) {
+        while (budget-- > 0 && (packet = this.inboundPackets.poll()) != null) {
             try {
                 processor.accept(packet);
             } catch (IllegalArgumentException | IllegalStateException | IndexOutOfBoundsException e) {
@@ -1280,6 +1367,29 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
                 log.error("Error handling inbound packet {} for player {}", packet.getClass().getSimpleName(), this.getName(), e);
             }
         }
+        this.reportInboundBacklog();
+    }
+
+    /**
+     * Reports a player whose queue stays deep after a drain.
+     * <p>
+     * A backlog that survives its budget is the first observable sign that a session is sending
+     * faster than the server is willing to read, and it shows up before anything is dropped and
+     * well before the tick suffers for it. Throttled, since a sustained flood would otherwise
+     * report on every tick.
+     */
+    private void reportInboundBacklog() {
+        final int backlog = this.inboundPackets.size();
+        if (backlog < INBOUND_BACKLOG_REPORT_THRESHOLD) {
+            return;
+        }
+        final long now = System.currentTimeMillis();
+        if (now - this.lastInboundBacklogReportMillis < INBOUND_BACKLOG_REPORT_INTERVAL_MILLIS) {
+            return;
+        }
+        this.lastInboundBacklogReportMillis = now;
+        log.warn("{}: {} inbound packets still queued after the tick's budget (capacity {})",
+                this.describeForRateLimit(), backlog, INBOUND_QUEUE_CAPACITY);
     }
 
     /**

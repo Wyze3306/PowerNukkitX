@@ -198,6 +198,19 @@ public class Server {
     private long tickCounter;
     private long nextTick;
     private long nextTickNanos;
+    /**
+     * How long a single tick has to run before it is worth a line, in nanoseconds. Twenty times the
+     * budget of a healthy tick, so this is a server that stopped responding for a moment rather
+     * than one that is merely behind.
+     */
+    private static final long SLOW_TICK_THRESHOLD_NANOS = 1_000_000_000L;
+    /**
+     * How long the slow tick report stays silent after printing, in milliseconds.
+     */
+    private static final long SLOW_TICK_REPORT_INTERVAL_MILLIS = 10_000L;
+    private long lastSlowTickReportMillis;
+    private long slowTickPeakNanos;
+    private int slowTicksSinceReport;
     private long lastTitleTickMillis;
     private long lastQueryRegenMillis;
     private long lastAutoSaveMillis;
@@ -1257,6 +1270,7 @@ public class Server {
 
         long nowNano = System.nanoTime();
         this.tickDurationsNanos[(int) (this.tickCounter & (this.tickDurationsNanos.length - 1))] = nowNano - tickTimeNano;
+        this.reportSlowTick(nowNano - tickTimeNano);
         float tick = (float) Math.min(getBaseTps(), 1_000_000_000d / Math.max(1, (double) nowNano - tickTimeNano));
         float use = (float) Math.min(1, ((double) (nowNano - tickTimeNano)) / nanosPerTick);
 
@@ -1280,6 +1294,40 @@ public class Server {
             this.nextTickNanos += nanosPerTick;
         }
         this.nextTick = tickTime;
+    }
+
+    /**
+     * Reports a tick that ran long.
+     * <p>
+     * Between a tick that is merely slow and one the watchdog calls a stall there is a wide band
+     * where the server is visibly unplayable and says nothing: the tick finishes, so no stack can
+     * be taken after the fact, and the averages behind {@code /status} are gone by the time anyone
+     * looks. A line per episode at least puts the spike on the clock, next to whatever else was
+     * being logged at that second, which is what makes it possible to say what set it off.
+     * <p>
+     * The first slow tick of an episode reports immediately - the timestamp is the point - and the
+     * rest are folded into the next report so a server that is struggling does not fill the log
+     * with the evidence of it.
+     */
+    private void reportSlowTick(long durationNanos) {
+        if (durationNanos < SLOW_TICK_THRESHOLD_NANOS) {
+            return;
+        }
+        this.slowTicksSinceReport++;
+        this.slowTickPeakNanos = Math.max(this.slowTickPeakNanos, durationNanos);
+
+        final long now = System.currentTimeMillis();
+        if (now - this.lastSlowTickReportMillis < SLOW_TICK_REPORT_INTERVAL_MILLIS) {
+            return;
+        }
+        this.lastSlowTickReportMillis = now;
+        log.warn("Tick #{} took {} ms ({} slow tick(s) since the last report, worst {} ms)",
+                this.tickCounter,
+                durationNanos / 1_000_000L,
+                this.slowTicksSinceReport,
+                this.slowTickPeakNanos / 1_000_000L);
+        this.slowTicksSinceReport = 0;
+        this.slowTickPeakNanos = 0L;
     }
 
     public long getNextTick() {
@@ -1383,11 +1431,11 @@ public class Server {
      * server as unresponsive.
      * Remember to clear this setting after use.
      *
-     * @param busyTime milliseconds
+     * @param busyTime how long the server is expected to stay busy, in milliseconds
      * @return id
      */
     public int addBusying(long busyTime) {
-        this.busyingTime.add(busyTime);
+        this.busyingTime.add(System.currentTimeMillis() + busyTime);
         return this.busyingTime.size() - 1;
     }
 
@@ -1395,11 +1443,32 @@ public class Server {
         this.busyingTime.removeLong(index);
     }
 
+    /**
+     * @return when the most recently declared busy period runs out, as an epoch millisecond, or
+     * {@code -1} when nothing has declared one
+     */
     public long getBusyingTime() {
         if (this.busyingTime.isEmpty()) {
             return -1;
         }
         return this.busyingTime.getLong(this.busyingTime.size() - 1);
+    }
+
+    /**
+     * @return whether something has declared the server legitimately busy and that declaration has
+     * not run out yet, so a main thread that is not ticking is expected rather than stuck
+     */
+    public boolean isBusy() {
+        if (this.busyingTime.isEmpty()) {
+            return false;
+        }
+        final long now = System.currentTimeMillis();
+        for (int i = 0; i < this.busyingTime.size(); i++) {
+            if (now < this.busyingTime.getLong(i)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public TickingAreaManager getTickingAreaManager() {
