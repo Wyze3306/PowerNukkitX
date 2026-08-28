@@ -116,6 +116,8 @@ import org.powernukkitx.event.player.PlayerInteractEvent.Action;
 import org.powernukkitx.event.player.PlayerTeleportEvent.TeleportCause;
 import org.powernukkitx.event.server.PacketSendEvent;
 import org.powernukkitx.form.window.Form;
+import org.powernukkitx.inventory.BeaconInventory;
+import org.powernukkitx.inventory.CartographyTableInventory;
 import org.powernukkitx.inventory.CraftTypeInventory;
 import org.powernukkitx.inventory.CrafterInventory;
 import org.powernukkitx.inventory.CraftingGridInventory;
@@ -5786,6 +5788,8 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             return false;
         }
         return inventory instanceof CraftTypeInventory
+                || inventory instanceof BeaconInventory
+                || inventory instanceof CartographyTableInventory
                 || (inventory instanceof FakeInventory fakeInventory
                 && fakeInventory.getFakeInventoryType() == FakeInventoryType.WORKBENCH);
     }
