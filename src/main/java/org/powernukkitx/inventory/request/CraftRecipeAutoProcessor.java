@@ -2,6 +2,7 @@ package org.powernukkitx.inventory.request;
 
 import lombok.extern.slf4j.Slf4j;
 import org.cloudburstmc.protocol.bedrock.data.inventory.ItemData;
+import org.cloudburstmc.protocol.bedrock.data.inventory.descriptor.EmptyDescriptor;
 import org.cloudburstmc.protocol.bedrock.data.inventory.descriptor.ItemDescriptor;
 import org.cloudburstmc.protocol.bedrock.data.inventory.descriptor.ItemTagDescriptor;
 import org.cloudburstmc.protocol.bedrock.data.inventory.descriptor.NameDescriptor;
@@ -16,7 +17,6 @@ import org.powernukkitx.event.inventory.CraftItemEvent;
 import org.powernukkitx.inventory.CreativeOutputInventory;
 import org.powernukkitx.item.Item;
 import org.powernukkitx.recipe.UserDataShapelessRecipe;
-import org.powernukkitx.recipe.descriptor.InvalidDescriptor;
 import org.powernukkitx.registry.Registries;
 import org.powernukkitx.tags.ItemTags;
 
@@ -51,19 +51,20 @@ public class CraftRecipeAutoProcessor implements ItemStackRequestActionProcessor
         }
 
         int success = 0;
-        for (int i = 0; i < eventItems.length; i++) {
-            RecipeIngredient serverExpect = action.getIngredients().get(i);
-            Item clientInputItem = eventItems[i];
-            boolean match = false;
-            if (serverExpect.getDescriptor() instanceof ItemTagDescriptor tagDescriptor) {
-                match = this.match(serverExpect, tagDescriptor, clientInputItem);
-            } else if (serverExpect.getDescriptor() instanceof NameDescriptor descriptor) {
-                match = this.match(serverExpect, descriptor, clientInputItem);
-            } else if (serverExpect.getDescriptor() instanceof InvalidDescriptor) {
-                match = clientInputItem.equals(Item.AIR);
-            }
-            if (match) {
-                success++;
+        for (Item clientInputItem : eventItems) {
+            for (RecipeIngredient serverExpect : action.getIngredients()) {
+                boolean match = false;
+                if (serverExpect.getDescriptor() instanceof ItemTagDescriptor tagDescriptor) {
+                    match = this.match(serverExpect, tagDescriptor, clientInputItem);
+                } else if (serverExpect.getDescriptor() instanceof NameDescriptor descriptor) {
+                    match = this.match(serverExpect, descriptor, clientInputItem);
+                } else if (serverExpect.getDescriptor() instanceof EmptyDescriptor) {
+                    match = clientInputItem.equals(Item.AIR);
+                }
+                if (match) {
+                    success++;
+                    break;
+                }
             }
         }
 
@@ -143,6 +144,7 @@ public class CraftRecipeAutoProcessor implements ItemStackRequestActionProcessor
             final ItemData itemData = ItemData.builder()
                 .definition(defaultDescriptor.getItemId())
                 .damage(defaultDescriptor.getAuxValue())
+                .count(Math.max(descriptorWithCount.getStackSize(), 1))
                 .build();
             return Item.fromNetwork(itemData).equals(item, true, false);
         }

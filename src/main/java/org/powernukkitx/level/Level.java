@@ -14,6 +14,7 @@ import org.powernukkitx.block.property.CommonBlockProperties;
 import org.powernukkitx.blockentity.BlockEntity;
 import org.powernukkitx.blockentity.BlockEntitySpawnable;
 import org.powernukkitx.config.category.GameplaySettings;
+import org.powernukkitx.event.level.ChunkTickEvent;
 import org.powernukkitx.level.tickingarea.TickingArea;
 import org.powernukkitx.level.tickingarea.manager.TickingAreaManager;
 import org.powernukkitx.entity.Entity;
@@ -1498,10 +1499,14 @@ public class Level implements Metadatable {
 
                 // Only tick if the chunk is in use, helps to keep block ticks in sync when reload chunk
                 if (isChunkInUse(hash)) {
-                    BlockUpdateEvent event = new BlockUpdateEvent(block);
-                    this.server.getPluginManager().callEvent(event);
+                    boolean cancelled = false;
+                    if (!BlockUpdateEvent.getHandlers().isEmpty()) {
+                        BlockUpdateEvent event = new BlockUpdateEvent(block);
+                        this.server.getPluginManager().callEvent(event);
+                        cancelled = event.isCancelled();
+                    }
 
-                    if (!event.isCancelled()) {
+                    if (!cancelled) {
                         block.onUpdate(BLOCK_UPDATE_NORMAL);
                         if (queuedUpdate.neighbor != null) {
                             block.onNeighborChange(queuedUpdate.neighbor.getOpposite());
@@ -2179,6 +2184,11 @@ public class Level implements Metadatable {
      * runs first to reject them before the four-lookup neighbour check.
      */
     private void addResolvedTickChunk(long index, List<IChunk> resolved) {
+        if (!ChunkTickEvent.getHandlers().isEmpty()) {
+            ChunkTickEvent event = new ChunkTickEvent(this, index);
+            getServer().getPluginManager().callEvent(event);
+            if (event.isCancelled()) return;
+        }
         IChunk chunk = this.getChunk(getHashX(index), getHashZ(index), false);
         if (chunk == null) {
             return;
@@ -3233,8 +3243,9 @@ public class Level implements Metadatable {
         blockPrevious.level = this;
         blockPrevious.layer = layer;
 
-        BlockChangeEvent blockChangeEvent = new BlockChangeEvent(block, blockPrevious);
-        this.server.getPluginManager().callEvent(blockChangeEvent);
+        if (!BlockChangeEvent.getHandlers().isEmpty()) {
+            this.server.getPluginManager().callEvent(new BlockChangeEvent(block, blockPrevious));
+        }
 
         if (layer == 0) {
             this.villageManager.onBlockChange(blockPrevious, block);
@@ -3262,16 +3273,21 @@ public class Level implements Metadatable {
                 updateAllLight(block);
             }
 
-            BlockUpdateEvent ev = new BlockUpdateEvent(block);
-            this.server.getPluginManager().callEvent(ev);
-            if (!ev.isCancelled()) {
+            BlockUpdateEvent ev = null;
+            if (!BlockUpdateEvent.getHandlers().isEmpty()) {
+                ev = new BlockUpdateEvent(block);
+                this.server.getPluginManager().callEvent(ev);
+            }
+            if (ev == null || !ev.isCancelled()) {
                 if (!this.entities.isEmpty()) {
                     for (Entity entity : this.fastNearbyEntities(new SimpleAxisAlignedBB(x - 1, y - 1, z - 1, x + 1, y + 1, z + 1))) {
                         entity.scheduleUpdate();
                     }
                 }
 
-                block = ev.getBlock();
+                if (ev != null) {
+                    block = ev.getBlock();
+                }
                 block.onUpdate(BLOCK_UPDATE_NORMAL);
                 block.getLevelBlockAtLayer(layer == 0 ? 1 : 0).onUpdate(BLOCK_UPDATE_NORMAL);
                 this.updateAround(x, y, z);

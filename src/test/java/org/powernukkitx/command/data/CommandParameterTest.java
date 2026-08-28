@@ -101,10 +101,10 @@ class CommandParameterTest {
     @Test
     void otherTypesAreSentAsDeclared() {
         assertEquals(CommandParam.SELECTION,
-                CommandParameter.newType("joueur", CommandParamType.SELECTION).toNetwork().getType());
+                CommandParameter.newType("player", CommandParamType.SELECTION).toNetwork().getType());
         assertEquals(CommandParam.ID,
-                CommandParameter.newType("duree", CommandParamType.ID).toNetwork().getType());
+                CommandParameter.newType("duration", CommandParamType.ID).toNetwork().getType());
         assertEquals(CommandParam.RAW_TEXT,
-                CommandParameter.newType("texte", CommandParamType.RAW_TEXT).toNetwork().getType());
+                CommandParameter.newType("text", CommandParamType.RAW_TEXT).toNetwork().getType());
     }
 }
