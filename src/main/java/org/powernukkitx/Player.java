@@ -116,6 +116,8 @@ import org.powernukkitx.event.player.PlayerInteractEvent.Action;
 import org.powernukkitx.event.player.PlayerTeleportEvent.TeleportCause;
 import org.powernukkitx.event.server.PacketSendEvent;
 import org.powernukkitx.form.window.Form;
+import org.powernukkitx.inventory.BeaconInventory;
+import org.powernukkitx.inventory.CartographyTableInventory;
 import org.powernukkitx.inventory.CraftTypeInventory;
 import org.powernukkitx.inventory.CrafterInventory;
 import org.powernukkitx.inventory.CraftingGridInventory;
@@ -6078,9 +6080,10 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
      * {@link #resetInventory()} otherwise hands it straight back at respawn, and anything parked in the 2x2 grid,
      * on the cursor or in an open crafting grid survives the death.
      * <p>
-     * Only crafting grids are taken from the open window, never a craft-looking inventory that is backed by a world
-     * block ({@link CrafterInventory}) or by a plugin menu: emptying those would destroy content that is not the
-     * dead player's.
+     * From the open window, only the inventories that hand their content back to the player in
+     * {@link Inventory#onClose(Player)} are taken: those hold the player's own items, so death has to take them like
+     * the rest. Storage backed by a world block is left alone, including {@link CrafterInventory}, which is marked
+     * {@link CraftTypeInventory} but keeps its content across sessions.
      */
     private List<Inventory> getDeathDropUIInventories() {
         List<Inventory> inventories = new ArrayList<>(3);
@@ -6099,6 +6102,8 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
             return false;
         }
         return inventory instanceof CraftTypeInventory
+                || inventory instanceof BeaconInventory
+                || inventory instanceof CartographyTableInventory
                 || (inventory instanceof FakeInventory fakeInventory
                 && fakeInventory.getFakeInventoryType() == FakeInventoryType.WORKBENCH);
     }
