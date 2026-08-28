@@ -46,6 +46,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -53,6 +54,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.ref.WeakReference;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -162,22 +164,43 @@ public class LevelDBProvider implements LevelProvider {
         return false;
     }
 
-    public static void writeLevelDat(String pathName, DimensionData dimensionData, LevelDat levelDat) {
+    //synchronized: concurrent saves of the same level would otherwise race on the shared
+    //temp file and could swap in a half-written level.dat.
+    public static synchronized void writeLevelDat(String pathName, DimensionData dimensionData, LevelDat levelDat) {
         Path path = Path.of(pathName);
         String levelDatName = "level.dat";
         if (dimensionData.getDimensionId() != 0) {
             levelDatName = "level_Dim%s.dat".formatted(dimensionData.getDimensionId());
         }
-        var levelDatNow = path.resolve(levelDatName).toFile();
-        try (var output = new FileOutputStream(levelDatNow);
-             var nbtOutputStream = NbtUtils.createWriterLE(output)) {
-            if (levelDatNow.exists()) {
-                Files.copy(path.resolve(levelDatName), path.resolve(levelDatName + "_old"), StandardCopyOption.REPLACE_EXISTING);
-            } else {
-                levelDatNow.createNewFile();
+        Path levelDatPath = path.resolve(levelDatName);
+        Path backupPath = path.resolve(levelDatName + "_old");
+        Path tempPath = path.resolve(levelDatName + ".tmp");
+        try {
+            //Rotate the backup before opening anything for writing: opening the real file
+            //truncates it, so copying it afterwards only ever backed up an empty file.
+            //An already truncated level.dat is never propagated over a healthy backup.
+            if (Files.isRegularFile(levelDatPath) && Files.size(levelDatPath) > levelDatMagic.length) {
+                Files.copy(levelDatPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
             }
-            output.write(levelDatMagic);//magic number
-            nbtOutputStream.writeTag(createWorldDataNBT(levelDat));
+            //Serialize first, so the file is opened only once the whole payload is known
+            var buffer = new ByteArrayOutputStream();
+            try (var nbtOutputStream = NbtUtils.createWriterLE(buffer)) {
+                nbtOutputStream.writeTag(createWorldDataNBT(levelDat));
+            }
+            //Write to a temporary file and swap it in atomically: an interrupted write
+            //(crash, kill, power loss) leaves the previous level.dat untouched instead of
+            //truncating it to the 8 magic bytes, which no longer parses as NBT.
+            try (var output = new FileOutputStream(tempPath.toFile())) {
+                output.write(levelDatMagic);//magic number
+                buffer.writeTo(output);
+                output.flush();
+                output.getFD().sync();
+            }
+            try {
+                Files.move(tempPath, levelDatPath, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tempPath, levelDatPath, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write level dat: ", e);
         }
