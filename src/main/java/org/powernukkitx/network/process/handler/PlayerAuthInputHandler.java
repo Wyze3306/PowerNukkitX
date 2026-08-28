@@ -40,6 +40,12 @@ import org.cloudburstmc.protocol.bedrock.packet.PlayerAuthInputPacket;
 @Slf4j
 public class PlayerAuthInputHandler implements PacketHandler<PlayerAuthInputPacket> {
 
+    /**
+     * How far from the player a block action may name a position, in blocks. See
+     * {@link #isOutOfReach(Player, Vector3i)}.
+     */
+    private static final double MAX_BLOCK_ACTION_DISTANCE = 64;
+
     @Override
     public void handle(PlayerAuthInputPacket packet, PlayerSessionHolder holder, Server server) {
         final Player player = holder.getPlayer();
@@ -235,13 +241,17 @@ public class PlayerAuthInputHandler implements PacketHandler<PlayerAuthInputPack
     private static void handleBlockActionsAndItemStackRequest(PlayerAuthInputPacket packet, PlayerSessionHolder holder, Server server, Player player) {
         // the override toggle ensures that an external source implements server authoritative block breaking, defaults to false
         if (!packet.getPlayerBlockActions().isEmpty() && !server.getSettings().miscSettings().overrideServerAuthBlockBreaking()) {
-            final PlayerHandle playerHandle = new PlayerHandle(player);
+            final PlayerHandle playerHandle = holder.getPlayerHandle();
             for (PlayerBlockActionData action : packet.getPlayerBlockActions()) {
                 //hack Since version 1.19.70, the Creative Mode Sword client no longer sends PREDITIC_DESTROY_BLOCK, but still sends START_DESTROY_BLOCK, filtering out
                 if (player.getInventory().getItemInMainHand().isSword() && player.isCreative() && action.getPlayerActionType() == PlayerActionType.START_DESTROY_BLOCK) {
                     continue;
                 }
                 Vector3i blockPos = action.getBlockPosition();
+                if (isOutOfReach(player, blockPos)) {
+                    playerHandle.recordUnreachableBlockAction(action.getPlayerActionType().name());
+                    continue;
+                }
                 BlockFace blockFace = BlockFace.fromIndex(action.getFacing());
                 if (playerHandle.getLastBlockAction() != null && playerHandle.getLastBlockAction().getPlayerActionType() == PlayerActionType.PREDICT_DESTROY_BLOCK &&
                         action.getPlayerActionType() == PlayerActionType.CONTINUE_DESTROY_BLOCK) {
@@ -278,6 +288,27 @@ public class PlayerAuthInputHandler implements PacketHandler<PlayerAuthInputPack
             itemStackRequestPacket.getRequests().add(packet.getItemStackRequest());
             PacketHandlerRegistry.getPacketHandler(ItemStackRequestPacket.class).handle(itemStackRequestPacket, holder, server);
         }
+    }
+
+    /**
+     * @return whether a block action names a position the player could not be acting on
+     * <p>
+     * The position in a block action is whatever the client put there, and everything below reads
+     * the level at it: {@code Level#getBlock} loads the chunk it lands in, so a position picked
+     * far enough away is a disk read the client asked for, up to once per action and once per
+     * packet without limit. The reach checks further down already refuse the action itself, but
+     * only after that read has happened.
+     * <p>
+     * {@link #MAX_BLOCK_ACTION_DISTANCE} sits far outside the range any of those checks allow, so
+     * nothing a client may legitimately do is turned away here - it only draws the line before
+     * which the position is inside chunks the player already has loaded, and past which the action
+     * was never going to be honoured anyway.
+     */
+    private static boolean isOutOfReach(Player player, Vector3i blockPos) {
+        double dx = blockPos.getX() + 0.5d - player.x;
+        double dy = blockPos.getY() + 0.5d - player.y;
+        double dz = blockPos.getZ() + 0.5d - player.z;
+        return dx * dx + dy * dy + dz * dz > MAX_BLOCK_ACTION_DISTANCE * MAX_BLOCK_ACTION_DISTANCE;
     }
 
     private static void syncMountedPlayerRotationFromInput(Player player, PlayerAuthInputPacket pk) {

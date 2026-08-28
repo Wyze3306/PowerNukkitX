@@ -38,10 +38,6 @@ public final class PacketRateLimiter {
     private final DeniedPacketLog movementDenied;
     private final DeniedPacketLog worldInteractionDenied;
 
-    public PacketRateLimiter(RateLimitSettings settings) {
-        this(settings, () -> "unknown client");
-    }
-
     /**
      * @param subject who the packets come from, used when a saturated limiter is summarised; only
      *                evaluated at that point, so a named player costs nothing per denied packet

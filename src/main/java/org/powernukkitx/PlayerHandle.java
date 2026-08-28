@@ -38,9 +38,15 @@ public final class PlayerHandle {
 
     public PlayerHandle(@NotNull Player player) {
         this.player = player;
-        this.packetRateLimiter = new PacketRateLimiter(
-                Server.getInstance().getSettings().networkSettings().rateLimitSettings()
-        );
+        this.packetRateLimiter = player.getPacketRateLimiter();
+    }
+
+    /**
+     * Counts one block action dropped for naming a position out of reach. See
+     * {@link Player#recordUnreachableBlockAction(String)}.
+     */
+    public void recordUnreachableBlockAction(String cause) {
+        player.recordUnreachableBlockAction(cause);
     }
 
     public void forceSendEmptyChunks() {

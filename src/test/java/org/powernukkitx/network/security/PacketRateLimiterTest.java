@@ -28,59 +28,59 @@ class PacketRateLimiterTest {
 
     @Test
     void firstCommandAllowed() {
-        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(10, 10, 10, 10));
+        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(10, 10, 10, 10), () -> "test client");
         assertTrue(limiter.tryCommand());
     }
 
     @Test
     void firstChatAllowed() {
-        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(10, 10, 10, 10));
+        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(10, 10, 10, 10), () -> "test client");
         assertTrue(limiter.tryChat());
     }
 
     @Test
     void firstFormResponseAllowed() {
-        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(10, 10, 10, 10));
+        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(10, 10, 10, 10), () -> "test client");
         assertTrue(limiter.tryFormResponse());
     }
 
     @Test
     void firstMovementAllowed() {
-        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(10, 10, 10, 10));
+        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(10, 10, 10, 10), () -> "test client");
         assertTrue(limiter.tryMovement());
     }
 
     @Test
     void commandExhaustedAtRateOne() {
-        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(1, 1000, 1000, 1000));
+        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(1, 1000, 1000, 1000), () -> "test client");
         assertTrue(limiter.tryCommand(), "First call must succeed");
         assertFalse(limiter.tryCommand(), "Second immediate call must fail at rate=1/s");
     }
 
     @Test
     void chatExhaustedAtRateOne() {
-        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(1000, 1, 1000, 1000));
+        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(1000, 1, 1000, 1000), () -> "test client");
         assertTrue(limiter.tryChat(), "First call must succeed");
         assertFalse(limiter.tryChat(), "Second immediate call must fail at rate=1/s");
     }
 
     @Test
     void formResponseExhaustedAtRateOne() {
-        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(1000, 1000, 1, 1000));
+        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(1000, 1000, 1, 1000), () -> "test client");
         assertTrue(limiter.tryFormResponse(), "First call must succeed");
         assertFalse(limiter.tryFormResponse(), "Second immediate call must fail at rate=1/s");
     }
 
     @Test
     void movementExhaustedAtRateOne() {
-        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(1000, 1000, 1000, 1));
+        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(1000, 1000, 1000, 1), () -> "test client");
         assertTrue(limiter.tryMovement(), "First call must succeed");
         assertFalse(limiter.tryMovement(), "Second immediate call must fail at rate=1/s");
     }
 
     @Test
     void limitersAreIndependent() {
-        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(1, 1000, 1000, 1000));
+        PacketRateLimiter limiter = new PacketRateLimiter(settingsWith(1, 1000, 1000, 1000), () -> "test client");
 
         assertTrue(limiter.tryCommand());
         assertFalse(limiter.tryCommand(), "Commands exhausted");
