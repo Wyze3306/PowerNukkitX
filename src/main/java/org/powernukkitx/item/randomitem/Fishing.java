@@ -46,6 +46,16 @@ public final class Fishing {
     public static final Selector JUNK_INK_SAC = putSelector(new ConstantItemSelector(ItemID.INK_SAC, JUNKS), 0.0099F);
     public static final Selector JUNK_INK_SAC_STACK = putSelector(new ConstantItemSelector(ItemID.INK_SAC, 0, 10, JUNKS), 0.0099F);
 
+    /**
+     * Selects a fish the way the {@code fishing/fish} loot table does, without the
+     * treasure and junk categories that {@link #getFishingResult(Item)} can also return.
+     *
+     * @return a cod, a salmon, a pufferfish or a tropical fish
+     */
+    public static Item getRandomFish() {
+        return (Item) selectFrom(FISHES);
+    }
+
     public static Item getFishingResult(Item rod) {
         int fortuneLevel = 0;
         int lureLevel = 0;
