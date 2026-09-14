@@ -5615,6 +5615,25 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         }
     }
 
+    /**
+     * A teleport of this player reaches everyone else as a {@link MovePlayerPacket} in
+     * {@link PositionMode#TELEPORT}, the same packet the player is sent.
+     * <p>
+     * The inherited version flags a {@link MoveActorAbsolutePacket} as teleported, and the client
+     * mishandles that flag on a player (pmmp/PocketMine-MP#4394): bystanders see the player snap to
+     * the destination, then jump again once the next move comes in - two teleports for one ender
+     * pearl. Ordinary moves carry no such flag and keep going through the inherited packet.
+     */
+    @Override
+    protected void broadcastMovement(boolean tp) {
+        if (!tp) {
+            super.broadcastMovement(false);
+            return;
+        }
+        this.sendPosition(this, this.yaw, this.pitch, PositionMode.TELEPORT,
+                this.getViewers().values().toArray(Player.EMPTY_ARRAY));
+    }
+
     @Override
     public boolean teleport(Location location, TeleportCause cause) {
         return this.teleport(location, cause, true);
