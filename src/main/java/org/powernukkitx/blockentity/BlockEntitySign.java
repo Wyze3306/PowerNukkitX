@@ -366,4 +366,8 @@ public class BlockEntitySign extends BlockEntitySpawnable {
         }
     }
 
+    @Override
+    public CompoundTag getPickNBT(Player player) {
+        return this.getCleanedNBT();
+    }
 }
