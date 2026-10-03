@@ -260,29 +260,38 @@ public class Server {
     private static final Pattern DP_UUID_CANON = Pattern
         .compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
 
-    private final Map<Integer, Level> levels = new HashMap<>() {
+    // Concurrent: levels are loaded and unloaded from other threads (asynchronous world loading)
+    // while the main thread and plugins iterate this map, and a HashMap threw
+    // ConcurrentModificationException out of those loops.
+    private final Map<Integer, Level> levels = new ConcurrentHashMap<>() {
         @Override
         public Level put(Integer key, Level value) {
             Level result = super.put(key, value);
-            levelArray = levels.values().toArray(Level.EMPTY_ARRAY);
+            refreshLevelArray();
             return result;
         }
 
         @Override
         public boolean remove(Object key, Object value) {
             boolean result = super.remove(key, value);
-            levelArray = levels.values().toArray(Level.EMPTY_ARRAY);
+            refreshLevelArray();
             return result;
         }
 
         @Override
         public Level remove(Object key) {
             Level result = super.remove(key);
-            levelArray = levels.values().toArray(Level.EMPTY_ARRAY);
+            refreshLevelArray();
             return result;
         }
+
+        // Under the map's monitor, so that of two concurrent changes the snapshot taken last,
+        // which sees both, is also the one kept.
+        private synchronized void refreshLevelArray() {
+            levelArray = values().toArray(Level.EMPTY_ARRAY);
+        }
     };
-    private Level[] levelArray;
+    private volatile Level[] levelArray;
     private final ServiceManager serviceManager = new NKServiceManager();
     private final Thread currentThread;
     private final long launchTime;
