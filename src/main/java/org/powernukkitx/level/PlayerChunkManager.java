@@ -19,6 +19,7 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -96,6 +97,12 @@ public final class PlayerChunkManager {
     private final LongArrayPriorityQueue chunkReadyToSend;
     private final LongOpenHashSet requeueScratch;
     private final LongOpenHashSet pruneScratch;
+    /**
+     * Chunks the level replaced while this player had them, to drop from {@link #sentChunks} so they
+     * are sent again. Filled by {@link #invalidateSentChunk(long)} from chunk-loading threads that
+     * can hold a chunk's lock, and only drained under this manager's own monitor.
+     */
+    private final ConcurrentLinkedQueue<Long> invalidatedChunks = new ConcurrentLinkedQueue<>();
     private long lastLoaderChunkPosHashed = Long.MAX_VALUE;
 
     public PlayerChunkManager(Player player) {
@@ -114,6 +121,7 @@ public final class PlayerChunkManager {
      * Handle chunk loading when the player teleported
      */
     public synchronized void handleTeleport() {
+        drainInvalidatedChunks();
         if (!player.isConnected()) return;
         refreshComparatorContext();
         int loaderChunkX = player.getChunkX();
@@ -129,6 +137,7 @@ public final class PlayerChunkManager {
     }
 
     public synchronized void tick() {
+        drainInvalidatedChunks();
         if (!player.isConnected()) return;
         refreshComparatorContext();
         long currentLoaderChunkPosHashed;
@@ -145,6 +154,7 @@ public final class PlayerChunkManager {
     }
 
     public synchronized void handleViewDistanceChange() {
+        drainInvalidatedChunks();
         if (!player.isConnected()) return;
         refreshComparatorContext();
         updateInRadiusChunks(player.getViewDistance(), player.getChunkX(), player.getChunkZ());
@@ -158,6 +168,29 @@ public final class PlayerChunkManager {
     @ApiStatus.Internal
     public LongOpenHashSet getUsedChunks() {
         return sentChunks;
+    }
+
+    /**
+     * Marks a chunk as needing to be sent again, without taking this manager's monitor.
+     * <p>
+     * The level calls this when it replaces a chunk, from whatever thread loaded it, possibly while
+     * holding that chunk's lock. {@link #handleTeleport()} takes the monitor first and the chunk's
+     * lock second (through {@code Level.getChunkAsync} and {@code Chunk.initChunk}), so taking them
+     * the other way round here froze the server for a night (2026-10-02). The removal is applied at
+     * the next tick instead.
+     */
+    @ApiStatus.Internal
+    public void invalidateSentChunk(long hash) {
+        if (player.isConnected()) {
+            invalidatedChunks.add(hash);
+        }
+    }
+
+    private void drainInvalidatedChunks() {
+        Long hash;
+        while ((hash = invalidatedChunks.poll()) != null) {
+            sentChunks.remove(hash.longValue());
+        }
     }
 
     @ApiStatus.Internal
