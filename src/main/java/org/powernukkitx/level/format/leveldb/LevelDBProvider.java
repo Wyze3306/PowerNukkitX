@@ -291,11 +291,8 @@ public class LevelDBProvider implements LevelProvider {
 
     public void putChunk(long index, IChunk chunk) {
         if (this.chunks.containsKey(index)) {
-            level.getPlayers().values().forEach(player -> {
-                synchronized (player.getPlayerChunkManager()) {
-                    player.getPlayerChunkManager().getUsedChunks().remove(index);
-                }
-            });
+            // Never under the player's chunk manager monitor: see invalidateSentChunk.
+            level.getPlayers().values().forEach(player -> player.getPlayerChunkManager().invalidateSentChunk(index));
         }
         chunks.put(index, chunk);
     }
