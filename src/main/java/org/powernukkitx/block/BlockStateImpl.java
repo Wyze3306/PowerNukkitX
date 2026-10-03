@@ -24,17 +24,24 @@ public record BlockStateImpl(String identifier,
                              BlockPropertyType.BlockPropertyValue<?, ?, ?>[] blockPropertyValues,
                              NbtMap blockStateTag
 ) implements BlockState {
-    static Int2ObjectOpenHashMap<BlockStateImpl> UNKNOWN_BLOCK_STATE_CACHE = new Int2ObjectOpenHashMap<>();
+    static final Int2ObjectOpenHashMap<BlockStateImpl> UNKNOWN_BLOCK_STATE_CACHE = new Int2ObjectOpenHashMap<>();
 
+    /**
+     * Called from the chunk-loading threads, many at once. The map is not thread-safe: two
+     * concurrent resizes leave a table with no free slot, and every later lookup probes it forever
+     * (253 async threads pinned at full CPU on the test server, 2026-10-03). Hence the lock.
+     */
     static BlockStateImpl makeUnknownBlockState(int hash, NbtMap blockTag) {
-        return UNKNOWN_BLOCK_STATE_CACHE.computeIfAbsent(hash, h -> new BlockStateImpl(BlockID.UNKNOWN, -2, (short) 0, new BlockPropertyType.BlockPropertyValue[0], NbtMap.builder()
-                        .putString("name", BlockID.UNKNOWN)
-                        .putCompound("states", NbtMap.EMPTY)
-                        .putCompound("Block", blockTag)
-                        .putInt("version", NetworkConstants.BLOCK_STATE_VERSION_NO_REVISION)
-                        .build()
-                )
-        );
+        synchronized (UNKNOWN_BLOCK_STATE_CACHE) {
+            return UNKNOWN_BLOCK_STATE_CACHE.computeIfAbsent(hash, h -> new BlockStateImpl(BlockID.UNKNOWN, -2, (short) 0, new BlockPropertyType.BlockPropertyValue[0], NbtMap.builder()
+                            .putString("name", BlockID.UNKNOWN)
+                            .putCompound("states", NbtMap.EMPTY)
+                            .putCompound("Block", blockTag)
+                            .putInt("version", NetworkConstants.BLOCK_STATE_VERSION_NO_REVISION)
+                            .build()
+                    )
+            );
+        }
     }
 
     private static NbtMap buildBlockStateTag(String identifier, BlockPropertyType.BlockPropertyValue<?, ?, ?>[] propertyValues) {
