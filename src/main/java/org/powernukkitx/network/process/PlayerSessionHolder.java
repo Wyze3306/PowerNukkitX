@@ -216,6 +216,12 @@ public class PlayerSessionHolder {
 
     public void sendBeforeSpawn(Server server) {
         this.doPlayerCreation();
+        // Login refused (ban, full server) or creation failed: the player is closed and was never
+        // initialised, so there is nothing to spawn. Going on failed half-way on the missing
+        // adventure settings, logged as a fault for every refused join.
+        if (this.player == null || !this.player.isConnected()) {
+            return;
+        }
         this.setState(SessionState.BEFORE_SPAWN);
 
         server.sendSleepingPlayersStatusImmediately(Set.of(this.player));
