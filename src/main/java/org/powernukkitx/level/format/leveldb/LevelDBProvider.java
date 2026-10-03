@@ -355,13 +355,14 @@ public class LevelDBProvider implements LevelProvider {
             boolean success = false;
             try {
                 final ChunkSection[] sections = unsafeChunk.getSections();
-                int subChunkCount = unsafeChunk.getDimensionData().getChunkSectionCount();
-                while (subChunkCount-- != 0) {
-                    if (sections[subChunkCount] != null) {
-                        break;
-                    }
+                final int sectionCount = unsafeChunk.getDimensionData().getChunkSectionCount();
+                // Sections above the highest one holding a block are left out, the client fills
+                // them with air. A chunk saved with all its sections (void worlds) used to go out
+                // as the whole column, since this only stopped at the highest non-null one.
+                int total = sectionCount;
+                while (total > 0 && (sections[total - 1] == null || sections[total - 1].isAllAir())) {
+                    total--;
                 }
-                int total = subChunkCount + 1;
                 final int minSectionY = unsafeChunk.getDimensionData().getMinSectionY();
                 //write block
                 if (level != null && level.isAntiXrayEnabled()) {
@@ -382,11 +383,11 @@ public class LevelDBProvider implements LevelProvider {
                     }
                 }
 
-                // Write biomes. Unlike blocks, the reader expects one palette per section of the whole
-                // dimension, so anything above the top section just repeats the one below it
-                final int biomeSectionCount = unsafeChunk.getDimensionData().getChunkSectionCount();
-                for (int i = 0; i < biomeSectionCount; i++) {
-                    final ChunkSection section = i < total ? sections[i] : null;
+                // Write biomes: the client reads one palette per section of the whole dimension,
+                // however many block sections came before. A missing one above the last block
+                // section just repeats the one below it
+                for (int i = 0; i < sectionCount; i++) {
+                    final ChunkSection section = sections[i];
                     if (section != null) {
                         section.biomes().writeToNetwork(byteBuf, Integer::intValue);
                     } else if (i >= total && i > 0) {
