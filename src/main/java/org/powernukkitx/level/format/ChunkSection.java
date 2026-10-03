@@ -139,6 +139,14 @@ public record ChunkSection(byte y,
         return blockLayer[0].isEmpty();
     }
 
+    /**
+     * Whether both block layers are air throughout, read off the palette words (see
+     * {@link Palette#uniformIndex()}): cheap enough to ask of every section of every chunk sent.
+     */
+    public boolean isAllAir() {
+        return blockLayer[0].isUniform(BlockAir.STATE) && blockLayer[1].isUniform(BlockAir.STATE);
+    }
+
     public void setNeedReObfuscate() {
         blockLayer[0].setNeedReObfuscate();
         blockLayer[1].setNeedReObfuscate();

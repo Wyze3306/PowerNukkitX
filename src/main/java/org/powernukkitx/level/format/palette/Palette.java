@@ -7,6 +7,7 @@ import org.powernukkitx.block.BlockUnknown;
 import org.powernukkitx.level.format.ChunkSection;
 import org.powernukkitx.level.format.bitarray.BitArray;
 import org.powernukkitx.level.format.bitarray.BitArrayVersion;
+import org.powernukkitx.level.format.bitarray.PaddedBitArray;
 import org.powernukkitx.level.updater.block.BlockStateUpdaters;
 import org.powernukkitx.level.updater.util.tagupdater.CompoundTagUpdaterContext;
 import org.powernukkitx.network.NetworkConstants;
@@ -108,18 +109,89 @@ public class Palette<V> {
 
     /**
      * Write the Palette data to the network buffer
+     * <p>
+     * A storage whose entries all hold the same value goes out in the single-value form: a header
+     * with zero bits per entry, then that value, and nothing else. Written in full, an all-air
+     * layer still costs its whole word array (1 KiB at 2 bits per entry), so a chunk of void sent
+     * its 24 sections, two layers and a biome palette each, as about 80 KB of zeros.
      *
      * @param byteBuf    the byte buf
      * @param serializer the serializer
      */
     public void writeToNetwork(ByteBuf byteBuf, RuntimeDataSerializer<V> serializer) {
+        final int uniformIndex = this.uniformIndex();
+        if (uniformIndex >= 0) {
+            byteBuf.writeByte(getPaletteHeader(BitArrayVersion.V0, true));
+            VarInts.writeInt(byteBuf, serializer.serialize(this.valueAt(uniformIndex)));
+            return;
+        }
         writeWords(byteBuf, serializer);
     }
 
     public void readFromNetwork(ByteBuf byteBuf, RuntimeDataDeserializer<V> deserializer) {
-        readWords(byteBuf, readBitArrayVersion(byteBuf));
+        final BitArrayVersion version = readBitArrayVersion(byteBuf);
+        if (version == BitArrayVersion.V0) {
+            this.bitArray = version.createArray(ChunkSection.SIZE, null);
+            this.clearPalette();
+            this.addToPalette(deserializer.deserialize(VarInts.readInt(byteBuf)));
+            this.onResize(BitArrayVersion.V2);
+            return;
+        }
+        readWords(byteBuf, version);
         final int size = this.bitArray.readSizeFromNetwork(byteBuf);
         for (int i = 0; i < size; i++) this.addToPalette(deserializer.deserialize(VarInts.readInt(byteBuf)));
+    }
+
+    /**
+     * The palette index every entry points to, or -1 when they differ.
+     * <p>
+     * Read off the words rather than entry by entry: every word of a uniform storage holds the same
+     * index in each of its slots, so this is a few hundred int compares where {@link #get} would
+     * take 4096 lookups. The padding bits of {@link PaddedBitArray} words and the unused slots of
+     * the last word are masked out, since a storage read from disk may carry anything there.
+     */
+    public int uniformIndex() {
+        final BitArray array = this.bitArray;
+        final BitArrayVersion version = array.version();
+        if (version == BitArrayVersion.V0) {
+            return 0;
+        }
+        final int[] words = array.words();
+        final int bits = version.bits;
+        final int perWord = version.entriesPerWord;
+        final int index = words[0] & version.maxEntryValue;
+        int full = 0;
+        for (int slot = 0; slot < perWord; slot++) {
+            full |= index << (slot * bits);
+        }
+        final int fullMask = lowBits(perWord * bits);
+        final int last = words.length - 1;
+        for (int i = 0; i < last; i++) {
+            if ((words[i] & fullMask) != full) {
+                return -1;
+            }
+        }
+        final int lastMask = lowBits((array.size() - last * perWord) * bits);
+        return (words[last] & lastMask) == (full & lastMask) ? index : -1;
+    }
+
+    /**
+     * Whether every entry holds {@code value}.
+     */
+    public boolean isUniform(V value) {
+        final int uniformIndex = this.uniformIndex();
+        return uniformIndex >= 0 && Objects.equals(this.valueAt(uniformIndex), value);
+    }
+
+    /**
+     * The value an entry pointing at {@code paletteIndex} reads as, the same way {@link #get} resolves it.
+     */
+    private V valueAt(int paletteIndex) {
+        return paletteIndex >= this.palette.size() ? this.palette.getFirst() : this.palette.get(paletteIndex);
+    }
+
+    private static int lowBits(int count) {
+        return count >= Integer.SIZE ? -1 : (1 << count) - 1;
     }
 
     protected boolean writeEmpty(ByteBuf byteBuf, RuntimeDataSerializer<V> serializer) {

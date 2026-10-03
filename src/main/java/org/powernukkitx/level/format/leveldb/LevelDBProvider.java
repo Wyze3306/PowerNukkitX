@@ -354,13 +354,14 @@ public class LevelDBProvider implements LevelProvider {
             boolean success = false;
             try {
                 final ChunkSection[] sections = unsafeChunk.getSections();
-                int subChunkCount = unsafeChunk.getDimensionData().getChunkSectionCount();
-                while (subChunkCount-- != 0) {
-                    if (sections[subChunkCount] != null) {
-                        break;
-                    }
+                final int sectionCount = unsafeChunk.getDimensionData().getChunkSectionCount();
+                // Sections above the highest one holding a block are left out, the client fills
+                // them with air. A chunk saved with all its sections (void worlds) used to go out
+                // as the whole column, since this only stopped at the highest non-null one.
+                int total = sectionCount;
+                while (total > 0 && (sections[total - 1] == null || sections[total - 1].isAllAir())) {
+                    total--;
                 }
-                int total = subChunkCount + 1;
                 final int minSectionY = unsafeChunk.getDimensionData().getMinSectionY();
                 //write block
                 if (level != null && level.isAntiXrayEnabled()) {
@@ -381,8 +382,9 @@ public class LevelDBProvider implements LevelProvider {
                     }
                 }
 
-                // Write biomes
-                for (int i = 0; i < total; i++) {
+                // Write biomes: the client reads one palette per section of the dimension,
+                // however many block sections came before
+                for (int i = 0; i < sectionCount; i++) {
                     final ChunkSection section = sections[i];
                     if (section != null) {
                         section.biomes().writeToNetwork(byteBuf, Integer::intValue);
