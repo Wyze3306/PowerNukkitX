@@ -4803,6 +4803,10 @@ public class Level implements Metadatable {
 
     private void processChunkRequest() {
         if (getProvider() == null) return;
+        // Players already told where the chunks of this pass are centred. The update used to go
+        // out immediately before every single chunk: a teleport cost one flushed, compressed and
+        // encrypted batch per chunk on top of the chunks themselves.
+        Set<Player> announced = null;
         for (long index : this.chunkSendQueue.keySet()) {
             int x = getHashX(index);
             int z = getHashZ(index);
@@ -4825,10 +4829,15 @@ public class Level implements Metadatable {
                     try {
                         for (Player player : playersToSend.values()) {
                             if (player.isConnected()) {
-                                final NetworkChunkPublisherUpdatePacket networkChunkPublisherUpdatePacket = new NetworkChunkPublisherUpdatePacket();
-                                networkChunkPublisherUpdatePacket.setNewPositionForView(player.asBlockVector3().toNetwork());
-                                networkChunkPublisherUpdatePacket.setNewRadiusForView(player.getViewDistance() << 4);
-                                player.sendPacketImmediately(networkChunkPublisherUpdatePacket);
+                                if (announced == null) {
+                                    announced = Collections.newSetFromMap(new IdentityHashMap<>());
+                                }
+                                if (announced.add(player)) {
+                                    final NetworkChunkPublisherUpdatePacket networkChunkPublisherUpdatePacket = new NetworkChunkPublisherUpdatePacket();
+                                    networkChunkPublisherUpdatePacket.setNewPositionForView(player.asBlockVector3().toNetwork());
+                                    networkChunkPublisherUpdatePacket.setNewRadiusForView(player.getViewDistance() << 4);
+                                    player.sendPacket(networkChunkPublisherUpdatePacket);
+                                }
 
                                 final LevelChunkPacket levelChunkPacket;
                                 levelChunkPacket = new LevelChunkPacket();
