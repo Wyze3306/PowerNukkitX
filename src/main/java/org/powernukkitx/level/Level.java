@@ -5005,10 +5005,18 @@ public class Level implements Metadatable {
         if (levelProvider != null) {
             IChunk loaded = levelProvider.getLoadedChunk(index);
             if (loaded != null) {
-                if (!loaded.isInitiated()) {
-                    loaded.initChunk();
+                if (loaded.isInitiated()) {
+                    return CompletableFuture.completedFuture(loaded);
                 }
-                return CompletableFuture.completedFuture(loaded);
+                // Never initialised on the caller's thread: PlayerChunkManager calls this under its own
+                // monitor, and initChunk() holds the chunk's lock while it builds entities and block
+                // entities, code that takes players' chunk managers (BlockEntitySpawnable.spawnToAll,
+                // LevelDBProvider.putChunk...). Waiting here for a chunk another thread was initialising
+                // froze the server on a teleport (2026-10-02, 2026-10-08).
+                return CompletableFuture.supplyAsync(() -> {
+                    loaded.initChunk();
+                    return loaded;
+                }, this.getScheduler().getAsyncTaskThreadPool());
             }
         }
         return CompletableFuture.supplyAsync(() -> {
