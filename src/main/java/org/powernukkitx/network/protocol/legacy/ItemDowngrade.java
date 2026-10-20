@@ -157,6 +157,19 @@ public final class ItemDowngrade {
     }
 
     /**
+     * @return the 1.26.50 runtime id of the server's item {@code nativeId} with aux value
+     * {@code aux}, or {@link Integer#MIN_VALUE} when 1.26.50 does not know that item or variant as
+     * it is; custom items keep their id
+     */
+    public int representableId(int nativeId, int aux) {
+        final String identifier = this.nativeNames.get(nativeId);
+        if (identifier == null) {
+            return nativeId;
+        }
+        return this.isRepresentable(identifier, aux) ? this.legacyIds.getInt(identifier) : Integer.MIN_VALUE;
+    }
+
+    /**
      * Translates an item packed as {@code runtimeId << 16 | aux}, the way item particles and eating
      * events carry it.
      */
