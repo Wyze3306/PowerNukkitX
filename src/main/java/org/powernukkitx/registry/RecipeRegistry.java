@@ -1150,9 +1150,9 @@ public class RecipeRegistry implements IRegistry<String, Recipe, Recipe> {
                     descriptor = new DefaultDescriptor(item);
 
                 } else {    // only other possibility is the "default" type
-                    String itemId = (String) data.get("itemId");
-                    int count = data.containsKey("count") ? Utils.toInt(data.get("count")) : 1;
                     short meta = (short) ((double) data.get("auxValue"));
+                    String itemId = withoutAuxSuffix((String) data.get("itemId"), meta);
+                    int count = data.containsKey("count") ? Utils.toInt(data.get("count")) : 1;
                     int networkAuxValue = meta == Short.MAX_VALUE || meta == -1 ? -1 : meta;
                     Item item;
 
@@ -1324,6 +1324,23 @@ public class RecipeRegistry implements IRegistry<String, Recipe, Recipe> {
         final int netId = (int) ((double) recipeObject.get("netId"));
 
         return new ShapedRecipe(id, new ShapedRecipe.Data(uuid, netId, priority), primaryResult.toItem(), shape, ingredients, extraResults, mirror, null);
+    }
+
+    /**
+     * Since 1.26.60 the recipe dump repeats the aux value at the end of the identifier, as in
+     * {@code minecraft:cobbled_deepslate:0}. Identifiers never end in {@code :<number>} otherwise, so
+     * the suffix is dropped when it matches the aux value; anything else is returned unchanged.
+     */
+    static String withoutAuxSuffix(String itemId, int auxValue) {
+        int colon = itemId.lastIndexOf(':');
+        if (colon <= 0 || itemId.indexOf(':') == colon) {
+            return itemId;
+        }
+        try {
+            return Integer.parseInt(itemId, colon + 1, itemId.length(), 10) == auxValue ? itemId.substring(0, colon) : itemId;
+        } catch (NumberFormatException e) {
+            return itemId;
+        }
     }
 
     private ItemDescriptor parseRecipeItem(Map<String, Object> data) {
