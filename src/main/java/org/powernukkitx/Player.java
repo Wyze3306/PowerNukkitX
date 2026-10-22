@@ -5391,12 +5391,13 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
     public void sendPosition(Vector3 pos, double yaw, double pitch, PositionMode mode, Player[] targets) {
         final MovePlayerPacket pk = new MovePlayerPacket();
         pk.setPlayerRuntimeID(this.getId());
-        // The client reads this position through the same fixed offset it applies when reporting its
-        // own, which is what the inbound handler takes back off with getBaseOffset(). Adding the eye
-        // height instead only agreed with it while standing: crouched it is 0.3 short and swimming
-        // 1.2, so a teleport dropped the player that far below where the server had put them, and
-        // bystanders saw them sunk into the ground.
-        pk.setPosition(Vector3f.from(pos.x, pos.y + this.getBaseOffset(), pos.z));
+        // A teleport or a correction is read by the client through the same fixed offset it applies
+        // when reporting its own position, which the inbound handler takes back off with
+        // getBaseOffset(): with the eye height a crouched player landed 0.3 short and a swimming one
+        // 1.2. Ordinary moves shown to other players keep the eye height, which is what combat has
+        // always been played and tuned with.
+        final float offset = mode == PositionMode.NORMAL ? this.getEyeHeight() : this.getBaseOffset();
+        pk.setPosition(Vector3f.from(pos.x, pos.y + offset, pos.z));
         pk.setRotation(Vector3f.from(pitch, yaw, yaw));
         pk.setPositionMode(mode);
         pk.setOnGround(this.onGround);
