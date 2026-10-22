@@ -28,6 +28,20 @@
             <AppenderRef ref="Console"/>
             <AppenderRef ref="File"/>
         </AsyncRoot>
+        <!-- Clients trigger these at will, an item stack request packet alone up to 128 of them:
+             warnings and errors are rate limited, debug output is left alone -->
+        <Logger name="org.powernukkitx.inventory.request">
+            <Filters>
+                <ThresholdFilter level="WARN" onMatch="NEUTRAL" onMismatch="ACCEPT"/>
+                <BurstFilter level="ERROR" rate="5" maxBurst="50"/>
+            </Filters>
+        </Logger>
+        <Logger name="org.powernukkitx.network.process.handler">
+            <Filters>
+                <ThresholdFilter level="WARN" onMatch="NEUTRAL" onMismatch="ACCEPT"/>
+                <BurstFilter level="ERROR" rate="5" maxBurst="50"/>
+            </Filters>
+        </Logger>
         <!--    disable useless debug log foreign library    -->
         <Logger name="oshi.hardware" level="info"/>
         <Logger name="oshi" level="info"/>
