@@ -61,9 +61,21 @@ class PacketTypeRateLimiterTest {
         }
         assertEquals(-1, PacketTypeRateLimiter.perSecond(TextPacket.class));
         assertEquals(-1, PacketTypeRateLimiter.perSecond(PlayerAuthInputPacket.class));
-        // Combat and inventory packets: a dropped one would be a hit or a click that does nothing
-        assertEquals(-1, PacketTypeRateLimiter.perSecond(InventoryTransactionPacket.class));
-        assertEquals(-1, PacketTypeRateLimiter.perSecond(InteractPacket.class));
+    }
+
+    @Test
+    void combatSurvivesACatchUpButNotAFlood() {
+        PacketTypeRateLimiter limiter = new PacketTypeRateLimiter(0L);
+        // Twenty seconds of 20 clicks a second arriving together after a stall
+        for (int i = 0; i < 400; i++) {
+            assertTrue(limiter.tryAcquire(InventoryTransactionPacket.class, 0L), "click " + i);
+            assertTrue(limiter.tryAcquire(InteractPacket.class, 0L), "interact " + i);
+        }
+        int allowed = 0;
+        for (int i = 0; i < 10_000; i++) {
+            if (limiter.tryAcquire(InventoryTransactionPacket.class, 0L)) allowed++;
+        }
+        assertEquals(400, allowed);
     }
 
     @Test
