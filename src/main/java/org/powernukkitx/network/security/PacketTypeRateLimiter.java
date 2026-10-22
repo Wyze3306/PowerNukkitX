@@ -7,14 +7,7 @@ import org.cloudburstmc.protocol.bedrock.packet.BlockActorDataPacket;
 import org.cloudburstmc.protocol.bedrock.packet.BlockPickRequestPacket;
 import org.cloudburstmc.protocol.bedrock.packet.BookEditPacket;
 import org.cloudburstmc.protocol.bedrock.packet.CommandBlockUpdatePacket;
-import org.cloudburstmc.protocol.bedrock.packet.ContainerClosePacket;
-import org.cloudburstmc.protocol.bedrock.packet.InteractPacket;
-import org.cloudburstmc.protocol.bedrock.packet.InventoryTransactionPacket;
-import org.cloudburstmc.protocol.bedrock.packet.ItemStackRequestPacket;
-import org.cloudburstmc.protocol.bedrock.packet.MobEquipmentPacket;
 import org.cloudburstmc.protocol.bedrock.packet.NpcRequestPacket;
-import org.cloudburstmc.protocol.bedrock.packet.PlayerActionPacket;
-import org.cloudburstmc.protocol.bedrock.packet.PlayerHotbarPacket;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerSkinPacket;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerToggleCrafterSlotRequestPacket;
 import org.cloudburstmc.protocol.bedrock.packet.PositionTrackingDBClientRequestPacket;
@@ -61,14 +54,8 @@ public final class PacketTypeRateLimiter {
         final List<double[]> limits = new ArrayList<>();
         // PlayerAuthInputPacket is left to the session limits: a client that comes back from a stall
         // sends all the ticks it held back at once, and dropping any of them loses its movement
-        // Inventory and world actions; clicking and scrolling quickly sends a few dozen a second
-        limit(limits, InventoryTransactionPacket.class, 60, 120);
-        limit(limits, ItemStackRequestPacket.class, 60, 120);
-        limit(limits, MobEquipmentPacket.class, 60, 120);
-        limit(limits, PlayerHotbarPacket.class, 60, 120);
-        limit(limits, InteractPacket.class, 60, 120);
-        limit(limits, PlayerActionPacket.class, 60, 120);
-        limit(limits, ContainerClosePacket.class, 20, 40);
+        // Attacks, item uses, hotbar and inventory packets are left to the session limits: they are
+        // what combat is made of, and dropping one is a hit that does nothing
         limit(limits, PlayerToggleCrafterSlotRequestPacket.class, 20, 40);
         // Writes into the world or into items, or answered with a lookup
         limit(limits, BookEditPacket.class, 20, 40);
