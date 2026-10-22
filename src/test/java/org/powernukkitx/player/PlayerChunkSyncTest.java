@@ -139,6 +139,39 @@ class PlayerChunkSyncTest {
         }
     }
 
+    /**
+     * The opposite case: a chunk still in view and still loaded by the player, that the manager only
+     * forgot while the copy was on its way (it does when the chunk is replaced in memory). The
+     * manager asks again only once the player walks into another chunk, so dropping that copy left
+     * a hole in the terrain for as long as the player stood still.
+     */
+    @Test
+    void aChunkForgottenWhileStillInViewIsDeliveredAndRecorded() throws InterruptedException {
+        generateAround(otherLevel, player.getViewDistance() + 1);
+        if (player.getLevel() != otherLevel) {
+            Assertions.assertTrue(player.teleport(
+                    new Location(0.5, 80, 0.5, otherLevel),
+                    PlayerTeleportEvent.TeleportCause.PLUGIN));
+        }
+        final GameLoop loop = GameLoop.builder().build();
+        for (int i = 0; i < 20; i++) {
+            otherLevel.subTick(loop);
+            player.getPlayerChunkManager().tick();
+        }
+
+        final long hash = Level.chunkHash(player.getChunkX(), player.getChunkZ());
+        synchronized (player.getPlayerChunkManager()) {
+            Assertions.assertTrue(player.getPlayerChunkManager().isSentChunk(hash), "the chunk under the player was sent");
+            player.getPlayerChunkManager().getUsedChunks().remove(hash);
+        }
+
+        player.sendChunk(player.getChunkX(), player.getChunkZ(), new LevelChunkPacket());
+
+        Assertions.assertTrue(player.getPlayerChunkManager().isSentChunk(hash),
+                "a chunk still in view and still loaded must be delivered and recorded again");
+        assertEveryReceivedChunkIsRegistered();
+    }
+
     private static void assertEveryReceivedChunkIsRegistered() {
         final Level level = player.getLevel();
         final LongOpenHashSet received;
