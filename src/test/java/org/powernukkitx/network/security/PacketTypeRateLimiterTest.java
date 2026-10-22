@@ -1,6 +1,8 @@
 package org.powernukkitx.network.security;
 
 import org.cloudburstmc.protocol.bedrock.packet.BookEditPacket;
+import org.cloudburstmc.protocol.bedrock.packet.InteractPacket;
+import org.cloudburstmc.protocol.bedrock.packet.InventoryTransactionPacket;
 import org.cloudburstmc.protocol.bedrock.packet.ItemStackRequestPacket;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerAuthInputPacket;
 import org.cloudburstmc.protocol.bedrock.packet.TextPacket;
@@ -18,18 +20,18 @@ class PacketTypeRateLimiterTest {
     void aBurstIsAllowedThenTheRate() {
         long now = 1_000L;
         PacketTypeRateLimiter limiter = new PacketTypeRateLimiter(now);
-        for (int i = 0; i < 120; i++) {
-            assertTrue(limiter.tryAcquire(ItemStackRequestPacket.class, now), "packet " + i);
+        for (int i = 0; i < 40; i++) {
+            assertTrue(limiter.tryAcquire(BookEditPacket.class, now), "packet " + i);
         }
-        assertFalse(limiter.tryAcquire(ItemStackRequestPacket.class, now));
+        assertFalse(limiter.tryAcquire(BookEditPacket.class, now));
 
-        // A hair over a second: exactly one second refills 59.99... tokens in floating point
+        // A hair over a second: exactly one second can refill 19.99... tokens in floating point
         now += SECOND + SECOND / 1000;
         int allowed = 0;
-        while (limiter.tryAcquire(ItemStackRequestPacket.class, now)) {
+        while (limiter.tryAcquire(BookEditPacket.class, now)) {
             allowed++;
         }
-        assertEquals(60, allowed);
+        assertEquals(20, allowed);
     }
 
     @Test
@@ -59,6 +61,9 @@ class PacketTypeRateLimiterTest {
         }
         assertEquals(-1, PacketTypeRateLimiter.perSecond(TextPacket.class));
         assertEquals(-1, PacketTypeRateLimiter.perSecond(PlayerAuthInputPacket.class));
+        // Combat and inventory packets: a dropped one would be a hit or a click that does nothing
+        assertEquals(-1, PacketTypeRateLimiter.perSecond(InventoryTransactionPacket.class));
+        assertEquals(-1, PacketTypeRateLimiter.perSecond(InteractPacket.class));
     }
 
     @Test
