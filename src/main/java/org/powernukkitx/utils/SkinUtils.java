@@ -45,7 +45,37 @@ public class SkinUtils {
         return new PersonaPieceTint(pieceType, colors);
     }
 
+    /** Largest skin, cape or animation frame a client may present: 512×512 RGBA. */
+    private static final int MAX_IMAGE_SIDE = 512;
+    /** Persona geometry is the largest JSON a skin carries. */
+    private static final int MAX_GEOMETRY_LENGTH = 1024 * 1024;
+
+    /**
+     * Whether an image has sane dimensions and exactly the bytes they call for. The skin is
+     * broadcast to every player, so an oversized one costs every connection, not just the sender's.
+     */
+    private boolean isValidImage(org.cloudburstmc.protocol.bedrock.data.skin.ImageData image) {
+        if (image == null) {
+            return true;
+        }
+        int width = image.getWidth();
+        int height = image.getHeight();
+        if (width < 0 || height < 0 || width > MAX_IMAGE_SIDE || height > MAX_IMAGE_SIDE) {
+            return false;
+        }
+        return image.getImage() == null || image.getImage().length == width * height * 4;
+    }
+
     public boolean isValid(Skin skin) {
+        if (!isValidImage(skin.getSkinData()) || !isValidImage(skin.getCapeData())
+                || (skin.getGeometryData() != null && skin.getGeometryData().length() > MAX_GEOMETRY_LENGTH)) {
+            return false;
+        }
+        for (var animation : skin.getAnimations()) {
+            if (!isValidImage(animation.getImage())) {
+                return false;
+            }
+        }
         return skin.getSkinId() != null && !skin.getSkinId().trim().isEmpty() && skin.getSkinId().length() < 100 &&
                 skin.getSkinData() != null && skin.getSkinData().getWidth() >= 32 && skin.getSkinData().getHeight() >= 32 &&
                 skin.getSkinData().getImage().length >= Skin.SINGLE_SKIN_SIZE &&

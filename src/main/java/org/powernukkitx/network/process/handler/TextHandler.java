@@ -1,5 +1,7 @@
 package org.powernukkitx.network.process.handler;
 
+import org.powernukkitx.event.player.PlayerHackDetectedEvent;
+
 import org.powernukkitx.PlayerHandle;
 import org.powernukkitx.Server;
 import org.powernukkitx.network.process.PacketHandler;
@@ -45,6 +47,16 @@ public class TextHandler implements PacketHandler<TextPacket> {
             // Chat messages shouldn't contain break lines so ignore text afterwards
             if (breakLine != -1) {
                 chatMessage = chatMessage.substring(0, breakLine);
+            }
+            if (chatMessage.startsWith("/") && !playerHandle.packetRateLimiter.tryCommand()) {
+                // Commands sent as chat count against the command limit like the command bar
+                PlayerHackDetectedEvent event = new PlayerHackDetectedEvent(
+                        playerHandle.player, PlayerHackDetectedEvent.HackType.COMMAND_SPAM);
+                playerHandle.player.getServer().getPluginManager().callEvent(event);
+                if (event.isKick()) {
+                    playerHandle.player.getSession().close("Exceeding command spam rate-limit");
+                }
+                return;
             }
             playerHandle.player.chat(chatMessage);
         }

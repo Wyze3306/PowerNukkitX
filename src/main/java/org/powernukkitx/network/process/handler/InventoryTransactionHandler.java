@@ -118,6 +118,12 @@ public class InventoryTransactionHandler implements PacketHandler<InventoryTrans
 
     private static void dropHotBarItemForPlayer(int hotbarSlot, int dropCount, Player player) {
         final HumanInventory inventory = player.getInventory();
+        // This path only ever throws from the hotbar; any other slot (armour, offhand) would let
+        // a client drop items the game keeps bound, such as Curse of Binding armour
+        if (!inventory.isHotbarSlot(hotbarSlot) || dropCount <= 0) {
+            inventory.sendContents(player);
+            return;
+        }
         Item item = inventory.getItem(hotbarSlot);
         if (item.isNull()) return;
 
@@ -152,8 +158,8 @@ public class InventoryTransactionHandler implements PacketHandler<InventoryTrans
             return;
         }
         ItemUseOnActorActionType type = transaction.getActionType();
-        if (player.getInventory().getHeldItemIndex() != transaction.getSlot()) {
-            player.getInventory().equipItem(transaction.getSlot());
+        if (!this.holdsSlot(player, transaction.getSlot())) {
+            return;
         }
         final Item itemFromNetwork = Item.fromNetwork(transaction.getItem());
         if (!itemFromNetwork.equalsExact(player.getInventory().getItemInMainHand())) {
@@ -288,13 +294,32 @@ public class InventoryTransactionHandler implements PacketHandler<InventoryTrans
         }
     }
 
+    /**
+     * Makes {@code slot} the held slot, the way the client says it already is. Every result of the
+     * use is written back to {@code slot}, so it must be the slot the used item came from: a slot
+     * that cannot be held (outside the hotbar, or a plugin cancelled the switch) is refused, or the
+     * held item would stay untouched while the result landed elsewhere, duplicating it.
+     *
+     * @return whether the player now holds {@code slot}
+     */
+    private boolean holdsSlot(@NotNull Player player, int slot) {
+        if (player.getInventory().getHeldItemIndex() != slot) {
+            player.getInventory().equipItem(slot);
+        }
+        if (player.getInventory().getHeldItemIndex() != slot) {
+            player.getInventory().sendContents(player);
+            return false;
+        }
+        return true;
+    }
+
     private void handleUseItem(@NotNull PlayerHandle playerHandle, @NotNull ItemUseInventoryTransaction transaction) {
         Player player = playerHandle.player;
         BlockVector3 blockVector = BlockVector3.fromNetwork(transaction.getPosition());
         BlockFace face = BlockFace.fromIndex(transaction.getFace());
         ItemUseActionType type = transaction.getActionType();
-        if (player.getInventory().getHeldItemIndex() != transaction.getSlot()) {
-            player.getInventory().equipItem(transaction.getSlot());
+        if (!this.holdsSlot(player, transaction.getSlot())) {
+            return;
         }
         switch (type) {
             case PLACE -> {

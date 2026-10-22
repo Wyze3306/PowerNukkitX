@@ -10,8 +10,9 @@ public class StatisticsPacket implements QueryPacket {
     // Request
     private int token;
     private boolean full;
-    // Response
-    private ByteBuf payload;
+    // Response, kept as bytes: the packet may be dropped before it is ever encoded, and a ByteBuf
+    // held here would then never be released
+    private byte[] payload;
 
     @Override
     public void decode(ByteBuf buffer) {
@@ -24,7 +25,9 @@ public class StatisticsPacket implements QueryPacket {
     @Override
     public void encode(ByteBuf buffer) {
         buffer.writeInt(sessionId);
-        buffer.writeBytes(payload);
+        if (payload != null) {
+            buffer.writeBytes(payload);
+        }
     }
 
     @Override
@@ -59,10 +62,17 @@ public class StatisticsPacket implements QueryPacket {
     }
 
     public ByteBuf getPayload() {
-        return payload;
+        return payload == null ? io.netty.buffer.Unpooled.EMPTY_BUFFER : io.netty.buffer.Unpooled.wrappedBuffer(payload);
     }
 
+    /**
+     * Copies and releases {@code payload}.
+     */
     public void setPayload(ByteBuf payload) {
-        this.payload = payload;
+        try {
+            this.payload = io.netty.buffer.ByteBufUtil.getBytes(payload);
+        } finally {
+            payload.release();
+        }
     }
 }

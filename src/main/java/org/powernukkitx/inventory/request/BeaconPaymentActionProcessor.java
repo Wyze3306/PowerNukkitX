@@ -20,7 +20,7 @@ import java.util.Set;
 
 @Slf4j
 public class BeaconPaymentActionProcessor implements ItemStackRequestActionProcessor<BeaconPaymentAction> {
-    private static final Set<String> VALID_PAYMENT_ITEMS = Set.of(
+    public static final Set<String> VALID_PAYMENT_ITEMS = Set.of(
             Item.IRON_INGOT,
             Item.GOLD_INGOT,
             Item.DIAMOND,
