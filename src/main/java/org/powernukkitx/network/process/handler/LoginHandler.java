@@ -28,6 +28,7 @@ import org.powernukkitx.network.process.PlayerSessionHolder;
 import org.powernukkitx.network.process.SessionState;
 import org.powernukkitx.network.process.auth.ClientChainData;
 import org.powernukkitx.network.process.auth.ClientSkinData;
+import org.powernukkitx.network.process.auth.PlayerNames;
 import org.powernukkitx.utils.SkinUtils;
 
 import java.security.GeneralSecurityException;
@@ -133,6 +134,11 @@ public class LoginHandler implements PacketHandler<LoginPacket> {
         if (refusal != null) {
             log.debug("Refusing a login from {}: {}", holder.getSession().getSocketAddress(), refusal);
             failLogin(holder, server, DisconnectFailReason.NOT_AUTHENTICATED, null);
+            return;
+        }
+
+        if (identityClaims.extraData == null || !PlayerNames.isValid(identityClaims.extraData.displayName)) {
+            failLogin(holder, server, DisconnectFailReason.INVALID_NAME, "disconnectionScreen.invalidName");
             return;
         }
 
