@@ -1,18 +1,19 @@
 package org.powernukkitx.utils;
 
-import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
-import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import lombok.Value;
 import org.cloudburstmc.protocol.bedrock.data.definitions.BlockDefinition;
 import org.cloudburstmc.protocol.common.DefinitionRegistry;
 
 /**
+ * The block definitions of a session, resolved from the block state hash as it is.
+ * <p>
+ * Keeps nothing per id: a registry that remembered every hash a client sent would grow with every
+ * new value a client chose to send, and definitions compare by their runtime id anyway.
+ *
  * @author Kaooot
  * @version 1.0
  */
 public class RuntimeBlockDefinitionRegistry implements DefinitionRegistry<BlockDefinition> {
-
-    private final Int2ObjectMap<BlockDefinition> definitions = new Int2ObjectOpenHashMap<>();
 
     public RuntimeBlockDefinitionRegistry() {
 
@@ -20,7 +21,7 @@ public class RuntimeBlockDefinitionRegistry implements DefinitionRegistry<BlockD
 
     @Override
     public BlockDefinition getDefinition(int runtimeId) {
-        return this.definitions.computeIfAbsent(runtimeId, RuntimeBlockDefinition::new);
+        return new RuntimeBlockDefinition(runtimeId);
     }
 
     @Override
