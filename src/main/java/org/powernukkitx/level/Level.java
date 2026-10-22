@@ -6098,9 +6098,13 @@ public class Level implements Metadatable {
     public int getStrongPower(Vector3 pos) {
         if (pos instanceof BlockPistonBase || this.getBlock(pos) instanceof BlockPistonBase) return 0;
 
+        // A vector of its own: callers pass a neighbour position they are still iterating from, and
+        // writing the next side into the level's shared scratch vector, which is that same vector,
+        // skipped the up, south and east neighbours
+        final Vector3 side = new Vector3();
         int i = 0;
         for (BlockFace face : BlockFace.values()) {
-            i = Math.max(i, this.getStrongPower(temporalVector.setComponentsAdding(pos, face), face));
+            i = Math.max(i, this.getStrongPower(side.setComponentsAdding(pos, face), face));
 
             if (i >= 15) {
                 return i;
@@ -6138,8 +6142,9 @@ public class Level implements Metadatable {
     }
 
     public boolean isBlockPowered(Vector3 pos) {
+        final Vector3 side = new Vector3();
         for (BlockFace face : BlockFace.values()) {
-            if (this.getRedstonePower(temporalVector.setComponentsAdding(pos, face), face) > 0) {
+            if (this.getRedstonePower(side.setComponentsAdding(pos, face), face) > 0) {
                 return true;
             }
         }
@@ -6149,9 +6154,10 @@ public class Level implements Metadatable {
 
     public int isBlockIndirectlyGettingPowered(Vector3 pos) {
         int power = 0;
+        final Vector3 side = new Vector3();
 
         for (BlockFace face : BlockFace.values()) {
-            int blockPower = this.getRedstonePower(temporalVector.setComponentsAdding(pos, face), face);
+            int blockPower = this.getRedstonePower(side.setComponentsAdding(pos, face), face);
 
             if (blockPower >= 15) {
                 return 15;
