@@ -7,7 +7,14 @@ import org.cloudburstmc.protocol.bedrock.packet.BlockActorDataPacket;
 import org.cloudburstmc.protocol.bedrock.packet.BlockPickRequestPacket;
 import org.cloudburstmc.protocol.bedrock.packet.BookEditPacket;
 import org.cloudburstmc.protocol.bedrock.packet.CommandBlockUpdatePacket;
+import org.cloudburstmc.protocol.bedrock.packet.ContainerClosePacket;
+import org.cloudburstmc.protocol.bedrock.packet.InteractPacket;
+import org.cloudburstmc.protocol.bedrock.packet.InventoryTransactionPacket;
+import org.cloudburstmc.protocol.bedrock.packet.ItemStackRequestPacket;
+import org.cloudburstmc.protocol.bedrock.packet.MobEquipmentPacket;
 import org.cloudburstmc.protocol.bedrock.packet.NpcRequestPacket;
+import org.cloudburstmc.protocol.bedrock.packet.PlayerActionPacket;
+import org.cloudburstmc.protocol.bedrock.packet.PlayerHotbarPacket;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerSkinPacket;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerToggleCrafterSlotRequestPacket;
 import org.cloudburstmc.protocol.bedrock.packet.PositionTrackingDBClientRequestPacket;
@@ -54,8 +61,16 @@ public final class PacketTypeRateLimiter {
         final List<double[]> limits = new ArrayList<>();
         // PlayerAuthInputPacket is left to the session limits: a client that comes back from a stall
         // sends all the ticks it held back at once, and dropping any of them loses its movement
-        // Attacks, item uses, hotbar and inventory packets are left to the session limits: they are
-        // what combat is made of, and dropping one is a hit that does nothing
+        // Attacks, item uses, hotbar and inventory packets: what combat is made of, so the buckets are
+        // far above any real client (20 a tick, 40 ticks of burst for the catch up after a stall) and
+        // only stop a modified client that floods them to slow the server down
+        limit(limits, InventoryTransactionPacket.class, 400, 800);
+        limit(limits, ItemStackRequestPacket.class, 400, 800);
+        limit(limits, PlayerActionPacket.class, 400, 800);
+        limit(limits, InteractPacket.class, 200, 400);
+        limit(limits, MobEquipmentPacket.class, 200, 400);
+        limit(limits, PlayerHotbarPacket.class, 200, 400);
+        limit(limits, ContainerClosePacket.class, 60, 120);
         limit(limits, PlayerToggleCrafterSlotRequestPacket.class, 20, 40);
         // Writes into the world or into items, or answered with a lookup
         limit(limits, BookEditPacket.class, 20, 40);
