@@ -240,6 +240,15 @@ public class BlockEntityBeacon extends BlockEntitySpawnable implements BlockEnti
             return false;
         }
 
+        // Choosing effects costs one payment item, the same rule the payment screen enforces
+        Item payment = this.getInventory().getItem(0);
+        if (payment.isNull() || !org.powernukkitx.inventory.request.BeaconPaymentActionProcessor.VALID_PAYMENT_ITEMS.contains(payment.getId())) {
+            return false;
+        }
+        if (player == null || player.getTopWindow().orElse(null) != this.getInventory()) {
+            return false;
+        }
+
         int primary = nbt.getInt("primary");
         if (!isPrimaryAllowed(primary, this.getPowerLevel())) {
             return false;

@@ -516,8 +516,23 @@ public abstract class EntityPhysical extends EntityCreature implements EntityAsy
         };
     }
 
+    /** Blocks a rider's input may move them per tick while mounted. */
+    private static final double MAX_RIDER_STEP = 8.0;
+
     protected void syncRiderLocationFromInput(Player rider, PlayerAuthInputPacket pk) {
         org.cloudburstmc.math.vector.Vector3f pos = pk.getPosition();
+        if (!Float.isFinite(pos.getX()) || !Float.isFinite(pos.getY()) || !Float.isFinite(pos.getZ())) {
+            return;
+        }
+        // The mount carries the rider at mount speeds: a larger jump is a teleport attempt, and a
+        // rider must not make the server load chunks wherever the input points
+        double dx = pos.getX() - rider.x;
+        double dy = pos.getY() - rider.y;
+        double dz = pos.getZ() - rider.z;
+        if (dx * dx + dy * dy + dz * dz > MAX_RIDER_STEP * MAX_RIDER_STEP
+            || !rider.getLevel().isChunkLoaded(((int) Math.floor(pos.getX())) >> 4, ((int) Math.floor(pos.getZ())) >> 4)) {
+            return;
+        }
 
         rider.applyClientLocationFromAuthInput(new Location(
                 pos.getX(),

@@ -88,6 +88,15 @@ public class MapInfoRequestHandler implements PacketHandler<MapInfoRequestPacket
                         int startX = Math.floorDiv(player.getFloorX() + halfMapSize, mapSize) * mapSize - halfMapSize;
                         int startZ = Math.floorDiv(player.getFloorZ() + halfMapSize, mapSize) * mapSize - halfMapSize;
                         map.renderMap(player.getLevel(), startX, startZ, zoom);
+                    }
+
+                    @Override
+                    public void onCompletion(org.powernukkitx.Server server) {
+                        // The inventory is the server thread's: the render ran on a worker, the
+                        // write-back happens here
+                        if (!player.isOnline()) {
+                            return;
+                        }
                         if (finalOffhand) {
                             if (checkMapItemValid(player.getOffhandInventory().getUnclonedItem(finalIndex), packet))
                                 player.getOffhandInventory().setItem(finalIndex, map);

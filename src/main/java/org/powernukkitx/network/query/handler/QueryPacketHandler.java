@@ -16,8 +16,18 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 
 public class QueryPacketHandler extends SimpleChannelInboundHandler<DirectAddressedQueryPacket> {
+    /** Requests one address may make per second; Query is polled by server lists, not spammed. */
+    private static final int REQUESTS_PER_SECOND = 8;
+    /** Distinct addresses tracked per window; beyond it new senders are dropped until it rolls. */
+    private static final int MAX_TRACKED_ADDRESSES = 65_536;
+    private static final long TOKEN_LIFETIME_NANOS = java.util.concurrent.TimeUnit.SECONDS.toNanos(30);
+
     private final QueryEventListener listener;
-    private byte[] token;
+    private volatile byte[] token;
+    private volatile byte[] previousToken;
+    private volatile long tokenIssuedNanos = System.nanoTime();
+    private final java.util.Map<java.net.InetAddress, int[]> requests = new java.util.HashMap<>();
+    private long windowStartNanos = System.nanoTime();
 
     public QueryPacketHandler(QueryEventListener listener) {
         this.listener = listener;
@@ -26,14 +36,42 @@ public class QueryPacketHandler extends SimpleChannelInboundHandler<DirectAddres
     }
 
 
+    /**
+     * Fixed one-second window per address. Runs on the channel's event loop only, so a plain map
+     * is enough; it is cleared every window, which also bounds its size.
+     */
+    private boolean allow(InetSocketAddress sender) {
+        long now = System.nanoTime();
+        if (now - this.windowStartNanos >= 1_000_000_000L) {
+            this.requests.clear();
+            this.windowStartNanos = now;
+        }
+        if (now - this.tokenIssuedNanos >= TOKEN_LIFETIME_NANOS) {
+            this.refreshToken();
+        }
+        int[] count = this.requests.get(sender.getAddress());
+        if (count == null) {
+            if (this.requests.size() >= MAX_TRACKED_ADDRESSES) {
+                return false;
+            }
+            this.requests.put(sender.getAddress(), count = new int[1]);
+        }
+        return ++count[0] <= REQUESTS_PER_SECOND;
+    }
+
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, DirectAddressedQueryPacket packet) {
+        if (!this.allow(packet.sender())) {
+            return;
+        }
         if (packet.content() instanceof HandshakePacket handshake) {
             handshake.setToken(getTokenString(packet.sender()));
             ctx.writeAndFlush(new DirectAddressedQueryPacket(handshake, packet.sender(), packet.recipient()), ctx.voidPromise());
         }
         if (packet.content() instanceof StatisticsPacket statistics) {
-            if (statistics.getToken() != getTokenInt(packet.sender())) {
+            // A token handed out just before a rotation stays good for one more lifetime
+            if (statistics.getToken() != getTokenInt(packet.sender(), this.token)
+                && (this.previousToken == null || statistics.getToken() != getTokenInt(packet.sender(), this.previousToken))) {
                 return;
             }
 
@@ -56,19 +94,21 @@ public class QueryPacketHandler extends SimpleChannelInboundHandler<DirectAddres
     }
 
     public void refreshToken() {
+        this.previousToken = this.token;
         this.token = this.generateToken();
+        this.tokenIssuedNanos = System.nanoTime();
     }
 
     private String getTokenString(InetSocketAddress socketAddress) {
-        return Integer.toString(getTokenInt(socketAddress));
+        return Integer.toString(getTokenInt(socketAddress, this.token));
 
     }
 
-    private int getTokenInt(InetSocketAddress socketAddress) {
-        return ByteBuffer.wrap(getToken(socketAddress)).getInt();
+    private int getTokenInt(InetSocketAddress socketAddress, byte[] secret) {
+        return ByteBuffer.wrap(getToken(socketAddress, secret)).getInt();
     }
 
-    private byte[] getToken(InetSocketAddress socketAddress) {
+    private byte[] getToken(InetSocketAddress socketAddress, byte[] secret) {
         MessageDigest digest;
         try {
             digest = MessageDigest.getInstance("SHA-512");
@@ -77,7 +117,7 @@ public class QueryPacketHandler extends SimpleChannelInboundHandler<DirectAddres
         }
 
         digest.update(socketAddress.toString().getBytes());
-        byte[] digested = digest.digest(this.token);
+        byte[] digested = digest.digest(secret);
         return Arrays.copyOf(digested, 4);
     }
 }

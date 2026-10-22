@@ -65,6 +65,11 @@ public class InteractHandler implements PacketHandler<InteractPacket> {
             }
             case InteractPacket.Action.OPEN_INVENTORY -> {
                 if (targetEntity.isRideable()) {
+                    // The client only opens a mount's inventory for the mount it rides or one in
+                    // reach; anything else would open chest boats and pack animals level-wide
+                    if (player.riding != targetEntity && !player.canInteract(targetEntity, player.isCreative() ? 8 : 5)) {
+                        return;
+                    }
                     if (targetEntity.openInventory(player)) return;
 
                     // If it was denied because of owner restriction: do nothing
