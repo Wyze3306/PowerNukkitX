@@ -60,6 +60,7 @@ import org.powernukkitx.network.process.NetworkState;
 import org.powernukkitx.network.process.PlayerSessionHolder;
 import org.powernukkitx.network.query.codec.QueryPacketCodec;
 import org.powernukkitx.network.query.handler.QueryPacketHandler;
+import org.powernukkitx.network.security.AddressBlockList;
 import org.powernukkitx.network.security.BotnetDetector;
 import org.powernukkitx.plugin.InternalPlugin;
 import org.powernukkitx.utils.Utils;
@@ -73,8 +74,6 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
@@ -99,7 +98,11 @@ public class Network implements NetworkInterface, SignalingService {
     private final LinkedList<NetWorkStatisticData> netWorkStatisticDataList = new LinkedList<>();
     private final AtomicReference<List<NetworkIF>> hardWareNetworkInterfaces = new AtomicReference<>(null);
     private final Map<InetSocketAddress, BedrockServerSession> sessionMap = new ConcurrentHashMap<>();
-    private final Map<InetAddress, LocalDateTime> blockIpMap = new ConcurrentHashMap<>();
+    /** Temporary blocks come from botnet detection in bulk; beyond this many, new ones are not taken. */
+    private static final int MAX_TEMPORARY_BLOCKS = 65_536;
+    private static final long BLOCK_PURGE_INTERVAL_MILLIS = 60_000L;
+    private final AddressBlockList blockedAddresses = new AddressBlockList(MAX_TEMPORARY_BLOCKS);
+    private long lastBlockPurge = System.currentTimeMillis();
     @Getter
     private final NetworkSettings.TransportType transport;
     private final EventLoopGroup eventLoopGroup;
@@ -602,7 +605,7 @@ public class Network implements NetworkInterface, SignalingService {
      * @param address the address
      */
     public void blockAddress(InetAddress address) {
-        blockIpMap.put(address, LocalDateTime.of(9999, 1, 1, 0, 0));
+        this.blockedAddresses.blockForever(address);
     }
 
     /**
@@ -612,7 +615,9 @@ public class Network implements NetworkInterface, SignalingService {
      * @param timeout the timeout,unit millisecond
      */
     public void blockAddress(InetAddress address, int timeout) {
-        blockIpMap.put(address, LocalDateTime.now().plus(timeout, ChronoUnit.MILLIS));
+        if (!this.blockedAddresses.block(address, timeout, System.currentTimeMillis())) {
+            log.debug("Not blocking {}: {} temporary blocks are active already", address, MAX_TEMPORARY_BLOCKS);
+        }
     }
 
     /**
@@ -621,7 +626,7 @@ public class Network implements NetworkInterface, SignalingService {
      * @param address the address
      */
     public void unblockAddress(InetAddress address) {
-        blockIpMap.remove(address);
+        this.blockedAddresses.unblock(address);
     }
 
     /**
@@ -659,14 +664,19 @@ public class Network implements NetworkInterface, SignalingService {
      * whether the address is blocked
      */
     public boolean isAddressBlocked(InetSocketAddress address) {
-        LocalDateTime until = this.blockIpMap.get(address.getAddress());
-        return until != null && LocalDateTime.now().isBefore(until);
+        return address.getAddress() != null
+            && this.blockedAddresses.isBlocked(address.getAddress(), System.currentTimeMillis());
     }
 
     /**
      * A function of tick for network session
      */
     public void process() {
+        final long now = System.currentTimeMillis();
+        if (now - this.lastBlockPurge >= BLOCK_PURGE_INTERVAL_MILLIS) {
+            this.lastBlockPurge = now;
+            this.blockedAddresses.purgeExpired(now);
+        }
         if (botnetDetector != null) {
             var bns = server.getSettings().networkSettings().botnetSettings();
             botnetDetector.tick().ifPresent(report -> {
