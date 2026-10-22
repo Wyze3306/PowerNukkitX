@@ -17,6 +17,7 @@ import org.cloudburstmc.protocol.bedrock.data.BuildPlatform;
 import org.cloudburstmc.protocol.bedrock.data.payload.experiment.ExperimentToggle;
 import org.cloudburstmc.protocol.bedrock.data.payload.list.PlayerListAddEntry;
 import org.cloudburstmc.protocol.bedrock.data.payload.list.PlayerListRemoveEntry;
+import org.cloudburstmc.protocol.bedrock.data.payload.skin.SerializedSkin;
 import org.cloudburstmc.protocol.bedrock.packet.BedrockPacket;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerListPacket;
 import org.iq80.leveldb.CompressionType;
@@ -1852,9 +1853,12 @@ public class Server {
         entry.setActorUniqueID(entityId);
         entry.setPlayerName(name);
         entry.setXblXUID(xboxUserId);
+        final SerializedSkin serializedSkin = SkinConverter.toSerializedSkin(skin.getSkin(), skin.isTrusted());
+        // Since 1.26.60 the PlayFab id travels in the entry, not in the skin, and must not be null
+        entry.setPlayFabID(serializedSkin.getPlayFabID());
         entry.setPlatformOnlineID("");
         entry.setBuildPlatform(BuildPlatform.UNKNOWN);
-        entry.setSerializedSkin(SkinConverter.toSerializedSkin(skin.getSkin(), skin.isTrusted()));
+        entry.setSerializedSkin(serializedSkin);
         entry.setPlayerColor(color.getRGB());
 
         pk.getEntries().add(entry);
@@ -1921,9 +1925,11 @@ public class Server {
             entry.setActorUniqueID(value.getId());
             entry.setPlayerName(value.getName());
             entry.setXblXUID(value.getXUID());
+            final SerializedSkin serializedSkin = SkinConverter.toSerializedSkin(value.getSkin().getSkin(), value.getSkin().isTrusted());
+            entry.setPlayFabID(serializedSkin.getPlayFabID());
             entry.setPlatformOnlineID("");
             entry.setBuildPlatform(BuildPlatform.UNKNOWN);
-            entry.setSerializedSkin(SkinConverter.toSerializedSkin(value.getSkin().getSkin(), value.getSkin().isTrusted()));
+            entry.setSerializedSkin(serializedSkin);
             entry.setPlayerColor(value.getLocatorBarColor().getRGB());
 
             pk.getEntries().add(entry);
