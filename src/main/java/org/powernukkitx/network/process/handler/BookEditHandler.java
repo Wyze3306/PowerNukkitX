@@ -59,12 +59,14 @@ public class BookEditHandler implements PacketHandler<BookEditPacket> {
                 break;
             case FINALIZE:
                 final BookEditAction.Finalize finalize = (BookEditAction.Finalize) action;
-                if (finalize.getTitle() == null || finalize.getAuthor() == null || finalize.getXuid() == null || finalize.getTitle().length() > 64 || finalize.getAuthor().length() > 64 || finalize.getXuid().length() > 64) {
-                    log.debug("{}: Invalid BookEditPacket action SIGN_BOOK: title/author/xuid is too long", playerHandle.getUsername());
+                if (finalize.getTitle() == null || finalize.getTitle().length() > 64) {
+                    log.debug("{}: Invalid BookEditPacket action SIGN_BOOK: title is missing or too long", playerHandle.getUsername());
                     return;
                 }
                 newBook = Item.get(Item.WRITTEN_BOOK, 0, 1, oldBook.getNbtBytes());
-                success = ((ItemWrittenBook) newBook).signBook(finalize.getTitle(), finalize.getAuthor(), finalize.getXuid(), ItemWrittenBook.GENERATION_ORIGINAL);
+                // The author and XUID the client sends are ignored: a book is signed by whoever signs it
+                final String xuid = player.getXUID();
+                success = ((ItemWrittenBook) newBook).signBook(finalize.getTitle(), player.getName(), xuid != null ? xuid : "", ItemWrittenBook.GENERATION_ORIGINAL);
                 break;
             default:
                 return;
