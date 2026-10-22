@@ -1198,6 +1198,14 @@ public class Level implements Metadatable {
         }
     }
 
+    /**
+     * @return whether the loader is registered for that chunk
+     */
+    public boolean isChunkLoader(ChunkLoader loader, int chunkX, int chunkZ) {
+        final Map<Integer, ChunkLoader> loaders = this.chunkLoaders.get(Level.chunkHash(chunkX, chunkZ));
+        return loaders != null && loaders.containsKey(loader.getLoaderId());
+    }
+
     public void addChunkPacket(int chunkX, int chunkZ, BedrockPacket packet) {
         long index = Level.chunkHash(chunkX, chunkZ);
         Deque<BedrockPacket> packets = chunkPackets.computeIfAbsent(index, i -> new ConcurrentLinkedDeque<>());

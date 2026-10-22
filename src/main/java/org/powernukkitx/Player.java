@@ -3015,15 +3015,22 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         }
 
         synchronized (playerChunkManager) {
-            // The chunk was serialised for a request made at least a tick ago, and it may have left
-            // the player's view since then - a view distance change, a fast walk, a teleport. When
-            // that happens the manager has already unregistered this player as a loader for it and
-            // despawned its entities; accepting the chunk now would mark it as received while the
-            // player loads nothing there, so it would get no entity spawns and no block updates
-            // until it leaves the radius and comes back. Whatever is still in radius is re-queued
-            // by the manager, so dropping the stale copy only costs one re-send.
-            if (!this.playerChunkManager.isSentChunk(Level.chunkHash(x, z))) {
-                return;
+            final long hash = Level.chunkHash(x, z);
+            if (!this.playerChunkManager.isSentChunk(hash)) {
+                // The chunk was serialised for a request made at least a tick ago, and it may have
+                // left the player's view since then - a view distance change, a fast walk, a
+                // teleport. The manager has then unregistered this player as a loader for it, and
+                // accepting the chunk would mark it as received while the player loads nothing
+                // there: no entity spawns and no block updates until it leaves the radius and comes
+                // back. That copy is dropped.
+                if (!this.playerChunkManager.getInRadiusChunks().contains(hash) || !this.level.isChunkLoader(this, x, z)) {
+                    return;
+                }
+                // Still in view and still loaded by this player: the manager only forgot it, as it
+                // does when the chunk is replaced in memory while the copy is on its way, and it
+                // asks again only once the player walks into another chunk. Dropping it left a hole
+                // in the terrain for as long as the player stood still.
+                this.playerChunkManager.getUsedChunks().add(hash);
             }
         }
 
