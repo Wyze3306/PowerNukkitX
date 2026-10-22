@@ -34,6 +34,8 @@ import org.cloudburstmc.protocol.bedrock.data.SoundEvent;
 import org.cloudburstmc.protocol.bedrock.packet.ItemStackRequestPacket;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerAuthInputPacket;
 
+import java.util.List;
+
 /**
  * @author Kaooot
  */
@@ -232,10 +234,21 @@ public class PlayerAuthInputHandler implements PacketHandler<PlayerAuthInputPack
         player.offerMovementTask(clientLoc);
     }
 
+    /**
+     * Block actions handled per input. A client reports the few that happened during its tick; a
+     * packet may carry thousands, each of which can load a chunk or resend the inventory.
+     */
+    static final int MAX_BLOCK_ACTIONS = 16;
+
+    static List<PlayerBlockActionData> blockActionsToHandle(PlayerAuthInputPacket packet) {
+        final List<PlayerBlockActionData> actions = packet.getPlayerBlockActions();
+        return actions.size() > MAX_BLOCK_ACTIONS ? actions.subList(0, MAX_BLOCK_ACTIONS) : actions;
+    }
+
     private static void handleBlockActionsAndItemStackRequest(PlayerAuthInputPacket packet, PlayerSessionHolder holder, Server server, Player player) {
         // the override toggle ensures that an external source implements server authoritative block breaking, defaults to false
         if (!packet.getPlayerBlockActions().isEmpty() && !server.getSettings().miscSettings().overrideServerAuthBlockBreaking()) {
-            for (PlayerBlockActionData action : packet.getPlayerBlockActions()) {
+            for (PlayerBlockActionData action : blockActionsToHandle(packet)) {
                 //hack Since version 1.19.70, the Creative Mode Sword client no longer sends PREDITIC_DESTROY_BLOCK, but still sends START_DESTROY_BLOCK, filtering out
                 if (player.getInventory().getItemInMainHand().isSword() && player.isCreative() && action.getPlayerActionType() == PlayerActionType.START_DESTROY_BLOCK) {
                     continue;
@@ -252,7 +265,8 @@ public class PlayerAuthInputHandler implements PacketHandler<PlayerAuthInputPack
                 BlockVector3 lastBreakPos = lastAction == null ? null : BlockVector3.fromNetwork(lastAction.getBlockPosition());
                 if (lastBreakPos != null && (lastBreakPos.getX() != blockPos.getX() || lastBreakPos.getY() != blockPos.getY() || lastBreakPos.getZ() != blockPos.getZ())) {
                     //When a block is broken instantaneous, the client sometimes just sends a START_DESTROY_BLOCK, but never completes or aborts it. On the client side, the block is also broken.
-                    double breakTime = player.getLevel().getBlock(lastBreakPos.asVector3()).calculateBreakTime(player.getInventory().getItemInMainHand(), player);
+                    // The position came from the client: never load a chunk for it
+                    double breakTime = player.getLevel().getBlock(lastBreakPos.asVector3(), false).calculateBreakTime(player.getInventory().getItemInMainHand(), player);
                     boolean canCompleteBreak = Long.sum(player.lastBreak, (long) (breakTime * 1000)) <= System.currentTimeMillis() + 50;
                     if (canCompleteBreak && lastAction.getPlayerActionType() == PlayerActionType.START_DESTROY_BLOCK) {
                         player.onBlockBreakComplete(lastBreakPos, BlockFace.fromIndex(lastAction.getFacing()));
