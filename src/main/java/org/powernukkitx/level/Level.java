@@ -395,7 +395,6 @@ public class Level implements Metadatable {
     private Vector3 mutableBlock;
     private boolean autoSave;
     private BlockMetadataStore blockMetadata;
-    private final Vector3 temporalVector;
     private final int chunkTickRadius;
     private final int chunksPerTicks;
     private final boolean clearChunksOnTick;
@@ -548,7 +547,6 @@ public class Level implements Metadatable {
         this.chunksPerTicks = this.server.getSettings().chunkSettings().chunksPerTicks();
         this.clearChunksOnTick = this.server.getSettings().chunkSettings().clearTickList();
         this.chunkTickList.clear();
-        this.temporalVector = new Vector3(0, 0, 0);
         this.scheduler = new ServerScheduler();
         this.tickRate = 1;
 
@@ -2301,13 +2299,18 @@ public class Level implements Metadatable {
     }
 
     public void updateComparatorOutputLevelSelective(Vector3 v, boolean observer) {
+        // Neighbour positions are kept in locals, not a shared scratch vector, so a call from
+        // another thread cannot move the position under this one. The arithmetic matches what
+        // Vector3.setComponentsAdding and getBlock(Vector3) did with it.
         for (BlockFace face : Plane.HORIZONTAL) {
-            temporalVector.setComponentsAdding(v, face);
+            double nx = v.x + face.getXOffset();
+            double ny = v.y + face.getYOffset();
+            double nz = v.z + face.getZOffset();
 
-            if (!this.isChunkLoaded((int) temporalVector.x >> 4, (int) temporalVector.z >> 4)) {
+            if (!this.isChunkLoaded((int) nx >> 4, (int) nz >> 4)) {
                 continue;
             }
-            Block block1 = this.getBlock(temporalVector);
+            Block block1 = this.getBlock((int) Math.floor(nx), (int) Math.floor(ny), (int) Math.floor(nz));
 
             if (BlockID.OBSERVER.equals(block1.getId())) {
                 if (observer) {
@@ -2316,7 +2319,10 @@ public class Level implements Metadatable {
             } else if (BlockRedstoneDiode.isDiode(block1)) {
                 block1.onUpdate(BLOCK_UPDATE_REDSTONE);
             } else if (block1.isNormalBlock()) {
-                block1 = this.getBlock(temporalVector.setComponentsAdding(temporalVector, face));
+                nx += face.getXOffset();
+                ny += face.getYOffset();
+                nz += face.getZOffset();
+                block1 = this.getBlock((int) Math.floor(nx), (int) Math.floor(ny), (int) Math.floor(nz));
 
                 if (BlockRedstoneDiode.isDiode(block1)) {
                     block1.onUpdate(BLOCK_UPDATE_REDSTONE);
@@ -2329,7 +2335,10 @@ public class Level implements Metadatable {
         }
 
         for (BlockFace face : Plane.VERTICAL) {
-            Block block1 = this.getBlock(temporalVector.setComponentsAdding(v, face));
+            Block block1 = this.getBlock(
+                    (int) Math.floor(v.x + face.getXOffset()),
+                    (int) Math.floor(v.y + face.getYOffset()),
+                    (int) Math.floor(v.z + face.getZOffset()));
 
             if (BlockID.OBSERVER.equals(block1.getId())) {
                 block1.onNeighborChange(face.getOpposite());
@@ -2577,7 +2586,7 @@ public class Level implements Metadatable {
             for (int z = minZ; z <= maxZ; ++z) {
                 for (int x = minX; x <= maxX; ++x) {
                     for (int y = minY; y <= maxY; ++y) {
-                        Block block = this.getBlock(this.temporalVector.setComponents(x, y, z), false);
+                        Block block = this.getBlock(x, y, z, false);
                         if (block != null && condition.test(block) && (ignoreCollidesCheck || block.collidesWithBB(bb))) {
                             return new Block[]{block};
                         }
@@ -2588,7 +2597,7 @@ public class Level implements Metadatable {
             for (int z = minZ; z <= maxZ; ++z) {
                 for (int x = minX; x <= maxX; ++x) {
                     for (int y = minY; y <= maxY; ++y) {
-                        Block block = this.getBlock(this.temporalVector.setComponents(x, y, z), false);
+                        Block block = this.getBlock(x, y, z, false);
                         if (block != null && condition.test(block) && (ignoreCollidesCheck || block.collidesWithBB(bb))) {
                             collides.add(block);
                         }
@@ -2640,7 +2649,7 @@ public class Level implements Metadatable {
             for (int z = minZ; z <= maxZ; ++z) {
                 for (int x = minX; x <= maxX; ++x) {
                     for (int y = minY; y <= maxY; ++y) {
-                        Block block = this.getTickCachedBlock(this.temporalVector.setComponents(x, y, z), false);
+                        Block block = this.getTickCachedBlock(x, y, z, false);
                         if (block != null && condition.test(block) && (ignoreCollidesCheck || block.collidesWithBB(bb))) {
                             return new Block[]{block};
                         }
@@ -2651,7 +2660,7 @@ public class Level implements Metadatable {
             for (int z = minZ; z <= maxZ; ++z) {
                 for (int x = minX; x <= maxX; ++x) {
                     for (int y = minY; y <= maxY; ++y) {
-                        Block block = this.getTickCachedBlock(this.temporalVector.setComponents(x, y, z), false);
+                        Block block = this.getTickCachedBlock(x, y, z, false);
                         if (block != null && condition.test(block) && (ignoreCollidesCheck || block.collidesWithBB(bb))) {
                             collides.add(block);
                         }
@@ -2684,7 +2693,7 @@ public class Level implements Metadatable {
         for (int z = minZ; z <= maxZ; ++z) {
             for (int x = minX; x <= maxX; ++x) {
                 for (int y = minY; y <= maxY; ++y) {
-                    Block block = this.getBlock(this.temporalVector.setComponents(x, y, z), false);
+                    Block block = this.getBlock(x, y, z, false);
                     if (!block.canPassThrough() && block.collidesWithBB(bb)) {
                         for (AxisAlignedBB collisionBox : block.getCollisionBoxes()) {
                             if (collisionBox.intersectsWith(bb)) {
@@ -2728,7 +2737,7 @@ public class Level implements Metadatable {
         for (int z = minZ; z <= maxZ; ++z) {
             for (int x = minX; x <= maxX; ++x) {
                 for (int y = minY; y <= maxY; ++y) {
-                    Block block = this.getBlock(this.temporalVector.setComponents(x, y, z), false);
+                    Block block = this.getBlock(x, y, z, false);
                     if (!block.canPassThrough() && block.collidesWithBB(bb)) {
                         for (AxisAlignedBB collisionBox : block.getCollisionBoxes()) {
                             if (collisionBox.intersectsWith(bb)) {
@@ -2760,7 +2769,7 @@ public class Level implements Metadatable {
         for (int z = minZ; z <= maxZ; ++z) {
             for (int x = minX; x <= maxX; ++x) {
                 for (int y = minY; y <= maxY; ++y) {
-                    Block block = this.getBlock(this.temporalVector.setComponents(x, y, z));
+                    Block block = this.getBlock(x, y, z);
                     if (!block.canPassThrough() && block.collidesWithBB(bb)) {
                         return true;
                     }
@@ -4554,7 +4563,6 @@ public class Level implements Metadatable {
         if (chunk.isFinished())
             addBlockChange(x, y, z);
 
-        temporalVector.setComponents(x, y, z);
         if (lightUpdatesEnabled) {
             updateAllLight(new Vector3(x, y, z));
         }
@@ -6099,8 +6107,7 @@ public class Level implements Metadatable {
         if (pos instanceof BlockPistonBase || this.getBlock(pos) instanceof BlockPistonBase) return 0;
 
         // A vector of its own: callers pass a neighbour position they are still iterating from, and
-        // writing the next side into the level's shared scratch vector, which is that same vector,
-        // skipped the up, south and east neighbours
+        // writing the next side into that same vector skipped the up, south and east neighbours
         final Vector3 side = new Vector3();
         int i = 0;
         for (BlockFace face : BlockFace.values()) {
