@@ -13,7 +13,11 @@
             <Policies>
                 <TimeBasedTriggeringPolicy/>
                 <OnStartupTriggeringPolicy/>
+                <!-- Roll by size too, so a flood of log lines ends up in several files instead of one -->
+                <SizeBasedTriggeringPolicy size="64 MB"/>
             </Policies>
+            <!-- Old logs are never deleted here: they are kept until someone decides otherwise -->
+            <DefaultRolloverStrategy max="32"/>
             <Filters>
                 <RegexFilter regex=".*Reading file /sys/class/net/.*" onMatch="DENY" onMismatch="ACCEPT"/>
             </Filters>
