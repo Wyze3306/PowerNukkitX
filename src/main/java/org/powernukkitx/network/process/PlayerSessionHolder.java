@@ -20,6 +20,7 @@ import org.cloudburstmc.protocol.bedrock.data.payload.connection.DisconnectPacke
 import org.cloudburstmc.protocol.bedrock.data.payload.editor.ServerEditorConnectionPolicy;
 import org.cloudburstmc.protocol.bedrock.data.payload.experiment.Experiments;
 import org.cloudburstmc.protocol.bedrock.data.payload.list.PlayerListAddEntry;
+import org.cloudburstmc.protocol.bedrock.data.payload.skin.SerializedSkin;
 import org.cloudburstmc.protocol.bedrock.data.payload.pack.PackIdVersion;
 import org.cloudburstmc.protocol.bedrock.data.payload.pack.PackInfoData;
 import org.cloudburstmc.protocol.bedrock.packet.*;
@@ -233,14 +234,15 @@ public class PlayerSessionHolder {
         playerListEntry.setActorUniqueID(this.player.getId());
         playerListEntry.setPlayerName(this.player.getName());
         playerListEntry.setXblXUID(this.player.getXUID());
+        final SerializedSkin serializedSkin = SkinConverter.toSerializedSkin(
+            this.player.getSkin().getSkin(),
+            this.player.getSkin().isTrusted()
+        );
+        // Since 1.26.60 the PlayFab id travels in the entry, not in the skin, and must not be null
+        playerListEntry.setPlayFabID(serializedSkin.getPlayFabID());
         playerListEntry.setPlatformOnlineID("");
         playerListEntry.setBuildPlatform(BuildPlatform.UNKNOWN);
-        playerListEntry.setSerializedSkin(
-            SkinConverter.toSerializedSkin(
-                this.player.getSkin().getSkin(),
-                this.player.getSkin().isTrusted()
-            )
-        );
+        playerListEntry.setSerializedSkin(serializedSkin);
         playerListEntry.setPlayerColor(this.player.getLocatorBarColor().getRGB());
 
         playerListPacket.getEntries().add(playerListEntry);
