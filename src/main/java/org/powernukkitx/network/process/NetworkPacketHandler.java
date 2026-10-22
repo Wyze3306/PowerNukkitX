@@ -4,7 +4,7 @@ import org.powernukkitx.Player;
 import org.powernukkitx.Server;
 import org.powernukkitx.event.server.PacketHandleEvent;
 import org.powernukkitx.event.server.PacketReceiveEvent;
-import lombok.RequiredArgsConstructor;
+import org.powernukkitx.network.security.PacketTypeRateLimiter;
 import lombok.extern.slf4j.Slf4j;
 import org.cloudburstmc.protocol.bedrock.packet.BedrockPacket;
 import org.cloudburstmc.protocol.bedrock.packet.BedrockPacketHandler;
@@ -15,15 +15,31 @@ import org.jetbrains.annotations.Nullable;
  * @author Kaooot
  */
 @Slf4j
-@RequiredArgsConstructor
 public class NetworkPacketHandler implements BedrockPacketHandler {
 
     private final Server server;
     private final PlayerSessionHolder session;
+    /** Per packet type limits, see {@link PacketTypeRateLimiter}; null when rate limiting is off. */
+    private final @Nullable PacketTypeRateLimiter packetTypeLimiter;
+
+    public NetworkPacketHandler(Server server, PlayerSessionHolder session) {
+        this.server = server;
+        this.session = session;
+        this.packetTypeLimiter = server.getSettings().networkSettings().rateLimitSettings().rateLimitEnabled()
+                ? new PacketTypeRateLimiter()
+                : null;
+    }
 
     @Override
     public PacketSignal handlePacket(BedrockPacket packet) {
         if (!this.session.checkRateLimits()) {
+            return PacketSignal.HANDLED;
+        }
+        if (this.packetTypeLimiter != null && !this.packetTypeLimiter.tryAcquire(packet)) {
+            if (this.packetTypeLimiter.reportDue()) {
+                log.debug("{}: dropping {} beyond {} per second", this.session.getSession().getSocketAddress(),
+                        packet.getClass().getSimpleName(), PacketTypeRateLimiter.perSecond(packet.getClass()));
+            }
             return PacketSignal.HANDLED;
         }
 
