@@ -158,13 +158,13 @@ public class MethodEventExecutor implements EventExecutor {
 
     private static Class<?> loadClass(ClassLoader loader, byte[] b) throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, IllegalAccessException, InaccessibleObjectException {
         Class<?> clazz;
-        java.lang.reflect.Method method;
-        if (defineClassMethodRef.get() == null) {
+        // Lue une seule fois : la relire après l'avoir testée laissait le GC vider la référence faible entre les
+        // deux lectures (method null, NPE à l'enregistrement des écouteurs d'un plugin au démarrage).
+        java.lang.reflect.Method method = defineClassMethodRef.get();
+        if (method == null) {
             var cls = Class.forName("java.lang.ClassLoader");
             method = cls.getDeclaredMethod("defineClass", String.class, byte[].class, int.class, int.class);
             defineClassMethodRef = new WeakReference<>(method);
-        } else {
-            method = defineClassMethodRef.get();
         }
         Objects.requireNonNull(method).setAccessible(true);
         try {
