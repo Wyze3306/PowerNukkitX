@@ -10,7 +10,6 @@ import com.google.common.collect.Sets;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.util.internal.EmptyArrays;
-import io.netty.util.internal.PlatformDependent;
 import it.unimi.dsi.fastutil.Pair;
 import it.unimi.dsi.fastutil.bytes.ByteOpenHashSet;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
@@ -202,6 +201,8 @@ import java.util.List;
 import java.util.Map.Entry;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -341,12 +342,24 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
     protected int previousInteractTick = 0;
     private final float rotationUpdateThreshold;
     private final float movementDistanceThreshold;
-    protected final Queue<Location> clientMovements = PlatformDependent.newMpscQueue(4);
+    /**
+     * Movements reported by the client, queued by the netty thread and handled in {@link #onUpdate}.
+     * It must accept more than one consumer: {@code teleport} and {@code switchLevel} clear it from
+     * whatever thread moves the player (the main thread, a plugin task, another level's thread) while
+     * the level thread polls it. Netty's MPSC queue spins forever in {@code poll} once two threads
+     * consume it, which froze a whole level thread for good (prod, 2026-10-24).
+     */
+    protected final Queue<Location> clientMovements = newClientMovementQueue();
+
+    /** Bounded like the netty queue it replaces (2048), safe for several producers and consumers. */
+    static Queue<Location> newClientMovementQueue() {
+        return new LinkedBlockingQueue<>(2048);
+    }
     /**
      * Inbound packets handed off from the netty thread to be dispatched on the main tick thread,
      * drained in arrival order at the start of {@link #onUpdate}. See {@link #handlePacket}.
      */
-    protected final Queue<BedrockPacket> inboundPackets = PlatformDependent.newMpscQueue();
+    protected final Queue<BedrockPacket> inboundPackets = new ConcurrentLinkedQueue<>();
     private Consumer<BedrockPacket> inboundProcessor;
     protected volatile String pendingClose;
     private final AtomicReference<Locale> locale = new AtomicReference<>(null);
@@ -1215,8 +1228,11 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         if (processor == null) {
             return;
         }
+        // A packet that moves the player to another level (a command, a portal) hands the rest of the
+        // queue to that level's thread: draining on here would handle this player on two threads at once.
+        final Level level = this.level;
         BedrockPacket packet;
-        while ((packet = this.inboundPackets.poll()) != null) {
+        while (this.level == level && (packet = this.inboundPackets.poll()) != null) {
             try {
                 processor.accept(packet);
             } catch (Exception e) {
@@ -3600,8 +3616,9 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
                 motionX = motionY = motionZ = 0;
             }
 
-            while (!this.clientMovements.isEmpty()) {
-                this.handleMovement(this.clientMovements.poll());
+            Location movement;
+            while ((movement = this.clientMovements.poll()) != null) {
+                this.handleMovement(movement);
             }
 
             if (!this.isSpectator()) {
