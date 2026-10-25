@@ -84,8 +84,13 @@ public class InteractHandler implements PacketHandler<InteractPacket> {
                     if(player.getTopWindow().isPresent()) return;
                     player.setInventoryOpen(player.getInventory().open(player));
                 } else {
+                    // The server still thinks the inventory is open, usually because it was closed
+                    // without a ContainerClose reaching ContainerCloseHandler. Clear the flag along with
+                    // the client close, or every later attempt lands here and the player can never
+                    // use the inventory again until a relog
                     player.forceClientCloseInventory();
-                    log.warn("{} tried to open the inventory while still being open!", player.getName());
+                    player.setInventoryOpen(false);
+                    log.debug("{} tried to open the inventory while still being open!", player.getName());
                 }
             }
         }
