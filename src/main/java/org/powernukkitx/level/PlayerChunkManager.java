@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.LongPredicate;
 
 @Slf4j
 public final class PlayerChunkManager {
@@ -92,11 +93,10 @@ public final class PlayerChunkManager {
     //holds all chunk hash values to be sent this tick
     private final @NotNull LongOpenHashSet inRadiusChunks;
     private final int trySendChunkCountPerTick;
-    private final LongArrayPriorityQueue chunkSendQueue;
+    private final ChunkQueue chunkSendQueue;
     private final Long2ObjectOpenHashMap<CompletableFuture<IChunk>> chunkLoadingQueue;
-    private final LongArrayPriorityQueue chunkReadyToSend;
+    private final ChunkQueue chunkReadyToSend;
     private final LongOpenHashSet requeueScratch;
-    private final LongOpenHashSet pruneScratch;
     /**
      * Chunks the level replaced while this player had them, to drop from {@link #sentChunks} so they
      * are sent again. Filled by {@link #invalidateSentChunk(long)} from chunk-loading threads that
@@ -109,12 +109,11 @@ public final class PlayerChunkManager {
         this.player = player;
         this.sentChunks = new LongOpenHashSet();
         this.inRadiusChunks = new LongOpenHashSet();
-        this.chunkSendQueue = new LongArrayPriorityQueue(player.getViewDistance() * player.getViewDistance(), chunkDistanceAndFovComparator);
+        this.chunkSendQueue = new ChunkQueue(player.getViewDistance() * player.getViewDistance(), chunkDistanceAndFovComparator);
         this.chunkLoadingQueue = new Long2ObjectOpenHashMap<>(player.getViewDistance() * player.getViewDistance());
         this.trySendChunkCountPerTick = player.getChunkSendCountPerTick();
-        this.chunkReadyToSend = new LongArrayPriorityQueue(player.getViewDistance() * player.getViewDistance(), chunkDistanceAndFovComparator);
+        this.chunkReadyToSend = new ChunkQueue(player.getViewDistance() * player.getViewDistance(), chunkDistanceAndFovComparator);
         this.requeueScratch = new LongOpenHashSet();
-        this.pruneScratch = new LongOpenHashSet();
     }
 
     /**
@@ -339,20 +338,43 @@ public final class PlayerChunkManager {
         chunkReadyToSend.clear();
     }
 
-    private void pruneQueueOutOfRadius(LongArrayPriorityQueue queue, boolean unloadChunkLoader) {
-        if (queue.isEmpty()) return;
-        LongOpenHashSet keep = pruneScratch;
-        keep.clear();
-        while (!queue.isEmpty()) {
-            long chunkHash = queue.dequeueLong();
-            if (inRadiusChunks.contains(chunkHash)) {
-                keep.add(chunkHash);
-            } else if (unloadChunkLoader) {
+    /**
+     * Drops the chunks that left the view radius, in one pass. Emptying the queue with
+     * {@code dequeueLong()} and refilling it cost O(n²): every dequeue of a
+     * {@link LongArrayPriorityQueue} scans the whole array for the smallest element, and the queue
+     * holds up to (2r+1)² chunks. With a large view distance (a cinematic ending, a long teleport)
+     * that froze the thread holding this manager for 200 to 450 ms (Linesia prod, 2026-10-25).
+     */
+    private void pruneQueueOutOfRadius(ChunkQueue queue, boolean unloadChunkLoader) {
+        queue.retain(chunkHash -> {
+            if (inRadiusChunks.contains(chunkHash)) return true;
+            if (unloadChunkLoader) {
                 sentChunks.remove(chunkHash);
                 unloadChunkForPlayer(chunkHash);
             }
+            return false;
+        });
+    }
+
+    /**
+     * {@link LongArrayPriorityQueue} that can be filtered in place. The order stays the comparator's:
+     * this queue finds its smallest element again at each dequeue, so dropping entries from its
+     * array cannot break it.
+     */
+    private static final class ChunkQueue extends LongArrayPriorityQueue {
+        ChunkQueue(int capacity, LongComparator comparator) {
+            super(capacity, comparator);
         }
-        keep.forEach(queue::enqueue);
+
+        void retain(LongPredicate keep) {
+            int kept = 0;
+            for (int i = 0; i < size; i++) {
+                long value = array[i];
+                if (keep.test(value)) array[kept++] = value;
+            }
+            size = kept;
+            firstIndexValid = false;
+        }
     }
 
     private void pruneLoadingQueueOutOfRadius() {
