@@ -107,7 +107,7 @@ public final class PlayerChunkManager {
 
     public PlayerChunkManager(Player player) {
         this.player = player;
-        this.sentChunks = new LongOpenHashSet();
+        this.sentChunks = new SentChunkSet();
         this.inRadiusChunks = new LongOpenHashSet();
         this.chunkSendQueue = new ChunkQueue(player.getViewDistance() * player.getViewDistance(), chunkDistanceAndFovComparator);
         this.chunkLoadingQueue = new Long2ObjectOpenHashMap<>(player.getViewDistance() * player.getViewDistance());
@@ -203,8 +203,16 @@ public final class PlayerChunkManager {
         chunkSendQueue.enqueue(Level.chunkHash(x, z));
     }
 
+    /**
+     * Whether the client has this chunk. Lock-free with respect to this manager: the set guards
+     * itself ({@link SentChunkSet}). Taking this manager's monitor made every caller wait for the
+     * player's level thread to finish loading and sending chunks ({@link #tick()} holds it all
+     * along), and the callers are often on the main thread ({@code Level.getChunkPlayers} for each
+     * block change or entity spawned from a plugin task): 200 to 400 ms freezes of the whole server
+     * on Linesia prod, 2026-10-25.
+     */
     @ApiStatus.Internal
-    public synchronized boolean isSentChunk(long hash) {
+    public boolean isSentChunk(long hash) {
         return sentChunks.contains(hash);
     }
 
@@ -354,6 +362,57 @@ public final class PlayerChunkManager {
             }
             return false;
         });
+    }
+
+    /**
+     * The chunks sent to the client. Written only under this manager's monitor (here and in
+     * {@code Player}), read from any thread: each single operation takes the set's own monitor, held
+     * for microseconds, so a lookup never sees a half-done insertion or rehash. Iterating still needs
+     * the manager's monitor, which keeps writers out for the whole loop.
+     */
+    private static final class SentChunkSet extends LongOpenHashSet {
+        @Override
+        public synchronized boolean add(long k) {
+            return super.add(k);
+        }
+
+        @Override
+        public synchronized boolean remove(long k) {
+            return super.remove(k);
+        }
+
+        @Override
+        public synchronized boolean contains(long k) {
+            return super.contains(k);
+        }
+
+        @Override
+        public synchronized void clear() {
+            super.clear();
+        }
+
+        @Override
+        public LongIterator iterator() {
+            LongIterator inner = super.iterator();
+            return new LongIterator() {
+                @Override
+                public boolean hasNext() {
+                    return inner.hasNext();
+                }
+
+                @Override
+                public long nextLong() {
+                    return inner.nextLong();
+                }
+
+                @Override
+                public void remove() {
+                    synchronized (SentChunkSet.this) {
+                        inner.remove();
+                    }
+                }
+            };
+        }
     }
 
     /**
