@@ -195,7 +195,7 @@ public final class BlockDowngrade {
     private static Map<String, Set<String>> schema(LegacyGameData data) {
         final Map<String, Set<String>> schema = new HashMap<>();
         for (NbtMap block : data.blocks()) {
-            schema.computeIfAbsent(block.getString("name"), _ -> new HashSet<>()).addAll(block.getCompound("states").keySet());
+            schema.computeIfAbsent(block.getString("name"), name -> new HashSet<>()).addAll(block.getCompound("states").keySet());
         }
         return schema;
     }

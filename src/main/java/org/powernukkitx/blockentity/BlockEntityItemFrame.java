@@ -1,6 +1,7 @@
 package org.powernukkitx.blockentity;
 
 import org.powernukkitx.Player;
+import org.powernukkitx.block.Block;
 import org.powernukkitx.block.BlockFrame;
 import org.powernukkitx.block.BlockID;
 import org.powernukkitx.entity.item.EntityItem;
