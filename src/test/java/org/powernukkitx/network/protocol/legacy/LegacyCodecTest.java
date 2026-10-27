@@ -150,7 +150,7 @@ class LegacyCodecTest {
         final CraftingDataPacket packet = new CraftingDataPacket();
         packet.getShapelessRecipes().add(shapeless("apples", 1, "minecraft:apple", "minecraft:breeze_rod"));
         packet.getShapelessRecipes().add(shapeless("ice", 2, "minecraft:ice_ball", "minecraft:snowball"));
-        packet.getShapelessRecipes().add(shapeless("ice_in", 3, "minecraft:snowball", "minecraft:icicle"));
+        packet.getShapelessRecipes().add(shapeless("ice_in", 3, "minecraft:snowball", "minecraft:ice_ball"));
         packet.getPotionMixes().add(mix(0, "minecraft:apple", 47));
         packet.getPotionMixes().add(mix(0, "minecraft:breeze_rod", 5));
         packet.setClearRecipes(true);
@@ -240,17 +240,17 @@ class LegacyCodecTest {
 
     @Test
     void fallingBlocksShowTheirOldState() {
-        final int icicle = hash(nativeData, "minecraft:icicle", Map.of("dripstone_thickness", "middle", "hanging", (byte) 0));
+        final int wire = hash(nativeData, "minecraft:redstone_wire", Map.of("redstone_signal", 5, "redstone_east", "side", "redstone_west", "up"));
         final SetActorDataPacket packet = new SetActorDataPacket();
         packet.setTargetRuntimeID(7);
-        packet.getActorData().put(ActorDataTypes.VARIANT, icicle);
+        packet.getActorData().put(ActorDataTypes.VARIANT, wire);
         packet.getActorData().put(ActorDataTypes.HEARTBEAT_SOUND_EVENT, SoundEvent.ICE_BALL_BREAK);
 
         final SetActorDataPacket decoded = roundTrip(packet);
-        Assertions.assertEquals(hash(legacyData, "minecraft:pointed_dripstone", Map.of("dripstone_thickness", "middle", "hanging", (byte) 0)),
+        Assertions.assertEquals(hash(legacyData, "minecraft:redstone_wire", Map.of("redstone_signal", 5)),
             decoded.getActorData().get(ActorDataTypes.VARIANT));
         Assertions.assertEquals(SoundEvent.GLASS, decoded.getActorData().get(ActorDataTypes.HEARTBEAT_SOUND_EVENT));
-        Assertions.assertEquals(icicle, packet.getActorData().get(ActorDataTypes.VARIANT));
+        Assertions.assertEquals(wire, packet.getActorData().get(ActorDataTypes.VARIANT));
     }
 
     @Test
