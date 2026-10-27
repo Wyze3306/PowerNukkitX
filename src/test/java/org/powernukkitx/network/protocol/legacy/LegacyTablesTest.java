@@ -65,12 +65,12 @@ class LegacyTablesTest {
     @Test
     void onlyTheReshapedAndAddedBlocksChange() {
         final IntSet legacyHashes = hashes(legacyData);
-        Assertions.assertEquals(23960, nativeData.blocks().size());
+        Assertions.assertEquals(23930, nativeData.blocks().size());
         Assertions.assertEquals(22091, legacyData.blocks().size());
 
         final BlockDowngrade blocks = tables.blocks();
         Assertions.assertEquals(0, blocks.misses(), "every server state has a 1.26.50 counterpart");
-        Assertions.assertEquals(1902, blocks.changedHashes().size());
+        Assertions.assertEquals(1872, blocks.changedHashes().size());
         Assertions.assertEquals(33, blocks.legacyOnlyHashes().size());
 
         final Set<String> changedNames = new HashSet<>(BlockStateUpdater_1_26_60.ADDED_PROPERTIES.keySet());
@@ -92,10 +92,6 @@ class LegacyTablesTest {
 
     @Test
     void newBlocksBecomeTheirClosestOldBlockWithTheSameProperties() {
-        final NbtMap icicle = state(nativeData, "minecraft:icicle", Map.of("dripstone_thickness", "tip", "hanging", (byte) 1));
-        final NbtMap dripstone = state(legacyData, "minecraft:pointed_dripstone", Map.of("dripstone_thickness", "tip", "hanging", (byte) 1));
-        Assertions.assertEquals(dripstone.getInt("network_id"), tables.blocks().downgrade(icicle.getInt("network_id")));
-
         final NbtMap wire = state(nativeData, "minecraft:redstone_wire", Map.of("redstone_signal", 7, "redstone_east", "side"));
         final NbtMap oldWire = state(legacyData, "minecraft:redstone_wire", Map.of("redstone_signal", 7));
         Assertions.assertEquals(oldWire.getInt("network_id"), tables.blocks().downgrade(wire.getInt("network_id")));
@@ -115,8 +111,8 @@ class LegacyTablesTest {
         Assertions.assertEquals(wire.getInt("network_id"), blocks.upgrade(oldWire.getInt("network_id")));
 
         final int air = state(nativeData, "minecraft:air", Map.of()).getInt("network_id");
-        final NbtMap icicle = state(nativeData, "minecraft:icicle", Map.of("dripstone_thickness", "base"));
-        Assertions.assertEquals(air, blocks.upgrade(icicle.getInt("network_id")), "a state the client cannot know is air");
+        final NbtMap sideWire = state(nativeData, "minecraft:redstone_wire", Map.of("redstone_signal", 3, "redstone_east", "side"));
+        Assertions.assertEquals(air, blocks.upgrade(sideWire.getInt("network_id")), "a state the client cannot know is air");
         Assertions.assertEquals(123456789, blocks.upgrade(123456789), "unknown hashes resolve as on the native protocol");
     }
 
@@ -143,7 +139,7 @@ class LegacyTablesTest {
             }
         }
         Assertions.assertEquals(82, moved);
-        Assertions.assertEquals(2081, nativeData.itemIds().size());
+        Assertions.assertEquals(2078, nativeData.itemIds().size());
         Assertions.assertEquals(2076, legacyData.itemIds().size());
 
         final int apple = nativeData.itemIds().getInt("minecraft:apple");
@@ -161,7 +157,8 @@ class LegacyTablesTest {
         final ItemDowngrade items = tables.items();
         final Set<String> added = new HashSet<>(nativeData.itemIds().keySet());
         added.removeAll(legacyData.itemIds().keySet());
-        Assertions.assertEquals(ItemDowngrade.FALLBACKS.keySet(), added);
+        // The experimental items PNX dropped since keep a fallback, in case they come back
+        Assertions.assertTrue(ItemDowngrade.FALLBACKS.keySet().containsAll(added), added.toString());
         for (String identifier : added) {
             final String sentAs = items.sentAs(identifier);
             Assertions.assertEquals(ItemDowngrade.FALLBACKS.get(identifier), sentAs);
@@ -211,15 +208,15 @@ class LegacyTablesTest {
 
     @Test
     void blockItemsCarryTheirOldState() {
-        final NbtMap icicle = state(nativeData, "minecraft:icicle", Map.of("dripstone_thickness", "tip", "hanging", (byte) 1));
+        final NbtMap chorus = state(nativeData, "minecraft:chorus_plant", Map.of("minecraft:connection_up", (byte) 1));
         final ItemData item = ItemData.builder()
-            .definition(new SimpleItemDefinition("minecraft:icicle", nativeData.itemIds().getInt("minecraft:icicle"), false))
-            .blockDefinition(new RuntimeBlockDefinition(icicle.getInt("network_id")))
+            .definition(new SimpleItemDefinition("minecraft:chorus_plant", nativeData.itemIds().getInt("minecraft:chorus_plant"), false))
+            .blockDefinition(new RuntimeBlockDefinition(chorus.getInt("network_id")))
             .count(1).build();
         final ItemData legacy = tables.items().downgrade(item);
-        Assertions.assertEquals("minecraft:pointed_dripstone", legacy.getDefinition().getIdentifier());
-        Assertions.assertEquals(legacyData.itemIds().getInt("minecraft:pointed_dripstone"), legacy.getDefinition().getRuntimeId());
-        Assertions.assertEquals(tables.blocks().downgrade(icicle.getInt("network_id")), legacy.getBlockDefinition().getRuntimeId());
+        Assertions.assertEquals("minecraft:chorus_plant", legacy.getDefinition().getIdentifier());
+        Assertions.assertEquals(legacyData.itemIds().getInt("minecraft:chorus_plant"), legacy.getDefinition().getRuntimeId());
+        Assertions.assertEquals(state(legacyData, "minecraft:chorus_plant", Map.of()).getInt("network_id"), legacy.getBlockDefinition().getRuntimeId());
     }
 
     @Test
