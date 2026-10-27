@@ -19,7 +19,7 @@ import org.powernukkitx.network.protocol.legacy.LegacyCodec_v2193;
  */
 public enum GameProtocol {
     /**
-     * Minecraft 1.26.50. Accepted only while {@code network-settings.multi-version} is on.
+     * Minecraft 1.26.50. Accepted only while {@code network-settings.multiVersion} is on.
      */
     V1_26_50(2193, LegacyCodec_v2193.CODEC),
     /**
@@ -85,6 +85,19 @@ public enum GameProtocol {
             }
         }
         return null;
+    }
+
+    /**
+     * @param multiVersion whether {@code network-settings.multiVersion} is on
+     * @return the version a client sending {@code protocolVersion} is served as, or {@code null}
+     * when the server does not accept that version
+     */
+    public static @Nullable GameProtocol accepted(int protocolVersion, boolean multiVersion) {
+        final GameProtocol protocol = byProtocolVersion(protocolVersion);
+        if (protocol == null || !protocol.isNative() && !multiVersion) {
+            return null;
+        }
+        return protocol;
     }
 
     /**

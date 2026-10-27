@@ -44,6 +44,9 @@ import org.powernukkitx.registry.VoxelShapeRegistry;
 import org.powernukkitx.utils.DefaultCameraAimAssistPresets;
 import org.powernukkitx.utils.DefaultCameraPresets;
 import org.powernukkitx.utils.RuntimeBlockDefinitionRegistry;
+import org.powernukkitx.network.protocol.GameProtocol;
+import org.powernukkitx.network.protocol.legacy.LegacyBlockDefinitionRegistry;
+import org.powernukkitx.network.protocol.legacy.LegacyTables;
 import org.powernukkitx.utils.SkinConverter;
 
 import java.lang.reflect.Constructor;
@@ -65,6 +68,11 @@ public class PlayerSessionHolder {
 
     private final BedrockServerSession session;
     private SessionState state = SessionState.INITIAL;
+    /**
+     * The version the client runs, set from its RequestNetworkSettings before the login, and the
+     * version whose codec the session speaks from then on.
+     */
+    private volatile GameProtocol protocol = GameProtocol.NATIVE;
     @Setter(AccessLevel.PRIVATE)
     private Player player;
     private Player.PlayerInfo playerInfo;
@@ -256,6 +264,10 @@ public class PlayerSessionHolder {
         this.sendStartGame(server);
 
         for (SyncActorPropertyPacket syncActorPropertyPacket : EntityProperty.getEntityPropertyCache()) {
+            if (!this.protocol.isNative() && LegacyTables.get().entities().isAdded(syncActorPropertyPacket.getPropertyData().getString("type", ""))) {
+                // The client does not know the entity
+                continue;
+            }
             this.session.sendPacketImmediately(syncActorPropertyPacket);
         }
 
@@ -281,7 +293,9 @@ public class PlayerSessionHolder {
         server.addOnlinePlayer(this.player);
         server.onPlayerCompleteLoginSequence(this.player);
 
-        this.session.getPeer().getCodecHelper().setBlockDefinitions(new RuntimeBlockDefinitionRegistry());
+        // An older client sends the block states of its version, resolved to the server's
+        this.session.getPeer().getCodecHelper().setBlockDefinitions(this.protocol.isNative()
+            ? new RuntimeBlockDefinitionRegistry() : new LegacyBlockDefinitionRegistry());
         this.session.getPeer().getCodecHelper().setCameraPresetDefinitions(DefaultCameraPresets.getDefinitions());
 
         this.session.sendPacketImmediately(Registries.BIOME.getBiomeDefinitionListPacket());
@@ -443,6 +457,12 @@ public class PlayerSessionHolder {
                     components
                 )
             );
+        }
+        if (!this.protocol.isNative()) {
+            // Same items under the ids of the client's version; its codec translates every id written
+            final List<ItemDefinition> legacyDefinitions = LegacyTables.get().items().downgradePalette(itemDefinitions);
+            itemDefinitions.clear();
+            itemDefinitions.addAll(legacyDefinitions);
         }
         itemRegistryPacket.getItemData().addAll(itemDefinitions);
 

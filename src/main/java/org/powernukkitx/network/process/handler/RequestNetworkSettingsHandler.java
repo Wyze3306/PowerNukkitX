@@ -1,12 +1,11 @@
 package org.powernukkitx.network.process.handler;
 
 import org.powernukkitx.Server;
-import org.powernukkitx.network.NetworkConstants;
+import org.powernukkitx.network.protocol.GameProtocol;
 import org.powernukkitx.network.process.PacketHandler;
 import org.powernukkitx.network.process.PlayerSessionHolder;
 import org.powernukkitx.network.process.SessionState;
 import org.cloudburstmc.protocol.bedrock.BedrockServerSession;
-import org.cloudburstmc.protocol.bedrock.codec.BedrockCodec;
 import org.cloudburstmc.protocol.bedrock.data.DisconnectFailReason;
 import org.cloudburstmc.protocol.bedrock.data.EncodingSettings;
 import org.cloudburstmc.protocol.bedrock.data.PacketCompressionAlgorithm;
@@ -24,11 +23,12 @@ public class RequestNetworkSettingsHandler implements PacketHandler<RequestNetwo
     @Override
     public void handle(RequestNetworkSettingsPacket packet, PlayerSessionHolder holder, Server server) {
         final int clientNetworkVersion = packet.getClientNetworkVersion();
-        final int serverNetworkVersion = NetworkConstants.CODEC.getProtocolVersion();
+        final GameProtocol protocol = GameProtocol.accepted(clientNetworkVersion,
+            server.getSettings().networkSettings().multiVersion());
         final BedrockServerSession session = holder.getSession();
 
-        if (clientNetworkVersion != serverNetworkVersion) {
-            final boolean serverOutdated = clientNetworkVersion > serverNetworkVersion;
+        if (protocol == null) {
+            final boolean serverOutdated = clientNetworkVersion > GameProtocol.NATIVE.protocolVersion();
             holder.sendPlayStatus(
                     serverOutdated ?
                             PlayStatus.LOGIN_FAILED_SERVER_OLD : PlayStatus.LOGIN_FAILED_CLIENT_OLD
@@ -49,6 +49,12 @@ public class RequestNetworkSettingsHandler implements PacketHandler<RequestNetwo
         }
 
         holder.setState(SessionState.REQUESTED_NETWORK_SETTINGS);
+
+        // Before anything else is configured: switching the codec replaces the codec helper
+        holder.setProtocol(protocol);
+        if (session.getCodec() != protocol.codec()) {
+            session.setCodec(protocol.codec());
+        }
 
         final PacketCompressionAlgorithm algorithm = Server.getInstance().getSettings().networkSettings().snappy() ?
                 PacketCompressionAlgorithm.SNAPPY : PacketCompressionAlgorithm.ZLIB;

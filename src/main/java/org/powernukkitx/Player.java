@@ -164,6 +164,7 @@ import org.powernukkitx.nbt.tag.ListTag;
 import org.powernukkitx.nbt.tag.StringTag;
 import org.powernukkitx.network.primitiveshape.PrimitiveShapes;
 import org.powernukkitx.network.process.PacketHandler;
+import org.powernukkitx.network.protocol.GameProtocol;
 import org.powernukkitx.network.process.auth.ClientChainData;
 import org.powernukkitx.permission.PermissibleBase;
 import org.powernukkitx.permission.Permission;
@@ -285,6 +286,7 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
     protected double blockBreakProgress = 0;
     protected int lastSentBreakTick = 0;
     protected final BedrockServerSession session;
+    private final GameProtocol gameProtocol;
     protected final InetSocketAddress rawSocketAddress;
     protected final Map<UUID, Player> hiddenPlayers = new HashMap<>();
     protected final Set<UUID> hiddenFromPlayerList = new HashSet<>();
@@ -504,6 +506,8 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         super(null, new CompoundTag());
         this.info = info;
         this.session = session;
+        final GameProtocol protocol = GameProtocol.byCodec(session.getCodec());
+        this.gameProtocol = protocol != null ? protocol : GameProtocol.NATIVE;
         this.perm = new PermissibleBase(this);
         this.server = Server.getInstance();
         this.lastBreak = -1;
@@ -542,6 +546,19 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
     @NotNull
     public BedrockServerSession getSession() {
         return this.session;
+    }
+
+    /**
+     * The Minecraft version the player's client runs. The server sends every player the same
+     * packets and translates them for older versions on their way out, so this only matters to
+     * code that has to know which content the client can show, such as a plugin choosing between
+     * an item 1.26.60 added and an older one.
+     *
+     * @return the version, fixed for the whole connection
+     */
+    @NotNull
+    public GameProtocol getGameProtocol() {
+        return this.gameProtocol;
     }
 
     /**

@@ -22,7 +22,6 @@ import org.powernukkitx.Player;
 import org.powernukkitx.Server;
 import org.powernukkitx.event.player.PlayerPreLoginEvent;
 import org.powernukkitx.event.player.PlayerLoginFailEvent;
-import org.powernukkitx.network.NetworkConstants;
 import org.powernukkitx.network.process.PacketHandler;
 import org.powernukkitx.network.process.PlayerSessionHolder;
 import org.powernukkitx.network.process.SessionState;
@@ -65,8 +64,10 @@ public class LoginHandler implements PacketHandler<LoginPacket> {
 
         final int clientNetworkVersion = packet.getClientNetworkVersion();
 
-        if (clientNetworkVersion != NetworkConstants.CODEC.getProtocolVersion()) {
-            final boolean serverOutdated = clientNetworkVersion > NetworkConstants.CODEC.getProtocolVersion();
+        // Must be the version the session was set up for in RequestNetworkSettings
+        final int sessionNetworkVersion = holder.getProtocol().protocolVersion();
+        if (clientNetworkVersion != sessionNetworkVersion) {
+            final boolean serverOutdated = clientNetworkVersion > sessionNetworkVersion;
             holder.sendPlayStatus(
                 serverOutdated ?
                     PlayStatus.LOGIN_FAILED_SERVER_OLD : PlayStatus.LOGIN_FAILED_CLIENT_OLD

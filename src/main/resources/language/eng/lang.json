@@ -169,6 +169,7 @@
   "pnx.settings.network.maxdecompresssize": "Maximum number of bytes the server can decompress",
   "pnx.settings.network.query": "Whether to enable query",
   "pnx.settings.network.logintime": "Login time",
+  "pnx.settings.network.multiversion": "Whether players on Minecraft 1.26.50 may join as well as those on 1.26.60. What they are sent is translated to what 1.26.50 knows: blocks, items and mobs added in 1.26.60 show as similar older ones, and recipes and creative items 1.26.50 lacks are left out",
   "pnx.settings.network.nethernet": "NetherNet transport settings",
   "pnx.settings.network.nethernet.signalingmode": "How the server obtains SDP offers. builtin: it serves the HTTP signalling endpoint on the listener port. nxs: it registers with the provider configured below and the provider hands over players. hybrid: both, so players can arrive either way. plugin: nothing is served and a plugin feeds offers through the signalling API",
   "pnx.settings.network.nethernet.nxs": "Settings for the NXS signalling provider. Only used in the nxs and hybrid modes",

@@ -30,6 +30,8 @@ public class NetworkSettings extends OkaeriConfig {
     boolean enableQuery = true;
     @Comment("pnx.settings.network.logintime")
     boolean checkLoginTime = false;
+    @Comment("pnx.settings.network.multiversion")
+    boolean multiVersion = true;
 
     @Comment("pnx.settings.network.nethernet")
     @CustomKey("nethernet")
