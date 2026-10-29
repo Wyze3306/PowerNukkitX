@@ -141,7 +141,7 @@ public class ItemRuntimeIdRegistry implements IRegistry<String, Integer, Integer
         // itemPalette
         out.writeInt(itemPalette.readableBytes());
         final byte[] data = new byte[itemPalette.readableBytes()];
-        itemPalette.readBytes(data);
+        itemPalette.getBytes(itemPalette.readerIndex(), data);
         out.write(data);
     }
 
@@ -158,9 +158,9 @@ public class ItemRuntimeIdRegistry implements IRegistry<String, Integer, Integer
         for (int i = 0; i < dataSize; i++) {
             ITEMDATA.add(new ItemData(in.readUTF(), in.readInt(), in.readInt(), in.readBoolean()));
         }
-        int palLen = in.readInt();
-        itemPalette = Unpooled.buffer();
-        itemPalette.readBytes(palLen);
+        final byte[] palette = new byte[in.readInt()];
+        in.readFully(palette);
+        itemPalette = Unpooled.wrappedBuffer(palette);
     }
 
     @Override
