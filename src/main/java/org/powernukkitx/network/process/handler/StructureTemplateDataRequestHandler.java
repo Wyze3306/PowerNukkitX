@@ -16,6 +16,12 @@ public class StructureTemplateDataRequestHandler implements PacketHandler<Struct
 
     @Override
     public void handle(StructureTemplateDataRequestPacket packet, PlayerSessionHolder holder, Server server) {
+        // Only an operator in creative uses structure blocks; anyone else would make the server
+        // read structure files on demand (upstream #3229).
+        final var player = holder.getPlayer();
+        if (player == null || !player.spawned || !player.isOp() || !player.isCreative()) {
+            return;
+        }
         final String structureName = packet.getStructureName();
         final StructureTemplateDataResponsePacket responsePacket = new StructureTemplateDataResponsePacket();
         responsePacket.setStructureName(structureName);
