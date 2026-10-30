@@ -87,6 +87,7 @@ import org.powernukkitx.nbt.tag.CompoundTag;
 import org.powernukkitx.nbt.tag.DoubleTag;
 import org.powernukkitx.nbt.tag.FloatTag;
 import org.powernukkitx.nbt.tag.ListTag;
+import org.powernukkitx.network.FlushablePeer;
 import org.powernukkitx.network.Network;
 import org.powernukkitx.network.NetworkConstants;
 import org.powernukkitx.network.NetworkInterface;
@@ -1136,6 +1137,20 @@ public class Server {
         }
     }
 
+    /**
+     * Writes what the tick queued for every player right away instead of on the next session
+     * timer, see {@link FlushablePeer}. With level threads each level flushes its own players when
+     * its tick ends instead, since a flush from here would split a level's tick across batches.
+     */
+    private void flushPlayerSessions() {
+        if (this.levelThreadMode) {
+            return;
+        }
+        for (Player player : this.players.values()) {
+            player.flushOutbound();
+        }
+    }
+
     public void doAutoSave() {
         if (this.getAutoSave()) {
             for (Player player : new ArrayList<>(this.players.values())) {
@@ -1185,6 +1200,7 @@ public class Server {
         this.getScheduler().mainThreadHeartbeat((int) this.tickCounter);
 
         this.checkTickUpdates((int) this.tickCounter);
+        this.flushPlayerSessions();
 
         if (tickTime - this.lastTitleTickMillis >= 800) {
             this.lastTitleTickMillis = tickTime;

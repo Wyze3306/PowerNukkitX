@@ -557,6 +557,9 @@ public class Level implements Metadatable {
                     try {
                         if (!this.players.isEmpty() || this.hasTickingAreas()) {
                             this.doTick(loop);
+                            for (Player player : this.players.values()) {
+                                player.flushOutbound();
+                            }
                         }
                     } catch (Throwable t) {
                         log.error("Error in base-tick for level {}", this.getName(), t);
@@ -5449,16 +5452,11 @@ public class Level implements Metadatable {
     public boolean standable(Vector3 vec, boolean allowWaterUnder, boolean loadChunks) {
         Position pos = Position.fromObject(vec, this);
         Block blockUnder = pos.add(0, -1, 0).getLevelBlock(0, loadChunks);
+        if (blockUnder.canPassThrough() && !(allowWaterUnder && blockUnder instanceof BlockFlowingWater)) return false;
         Block block = pos.getLevelBlock(0, loadChunks);
+        if (!block.isAir() && !block.canPassThrough()) return false;
         Block blockUpper = pos.add(0, 1, 0).getLevelBlock(0, loadChunks);
-        if (!allowWaterUnder)
-            return !blockUnder.canPassThrough()
-                    && (block.isAir() || block.canPassThrough())
-                    && (blockUpper.isAir() || blockUpper.canPassThrough());
-        else
-            return (!blockUnder.canPassThrough() || blockUnder instanceof BlockFlowingWater)
-                    && (block.isAir() || block.canPassThrough())
-                    && (blockUpper.isAir() || blockUpper.canPassThrough());
+        return blockUpper.isAir() || blockUpper.canPassThrough();
     }
 
     public boolean isTicked() {
