@@ -238,23 +238,27 @@ public interface IHuman extends InventoryHolder {
         var skin = getSkin();
         var serializedSkin = skin.getSkin();
         if (serializedSkin != null) {
+            // SkinUtils.isValid accepts a skin whose PlayFab id, cape, arm size, skin colour, geometry
+            // or animation data are null. Those fields come from the client: dereferencing them here
+            // threw out of Player.save(), so the player file was never written.
+            ImageData capeData = serializedSkin.getCapeData() != null ? serializedSkin.getCapeData() : ImageData.EMPTY;
             CompoundTag skinTag = new CompoundTag()
                 .putByteArray("Data", serializedSkin.getSkinData().getImage())
                 .putInt("SkinImageWidth", serializedSkin.getSkinData().getWidth())
                 .putInt("SkinImageHeight", serializedSkin.getSkinData().getHeight())
                 .putString("ModelId", serializedSkin.getSkinId())
-                .putString("CapeId", serializedSkin.getCapeId())
-                .putByteArray("CapeData", serializedSkin.getCapeData().getImage())
-                .putInt("CapeImageWidth", serializedSkin.getCapeData().getWidth())
-                .putInt("CapeImageHeight", serializedSkin.getCapeData().getHeight())
-                .putByteArray("SkinResourcePatch", serializedSkin.getSkinResourcePatch().getBytes(StandardCharsets.UTF_8))
-                .putByteArray("GeometryData", serializedSkin.getGeometryData().getBytes(StandardCharsets.UTF_8))
-                .putByteArray("SkinAnimationData", serializedSkin.getAnimationData().getBytes(StandardCharsets.UTF_8))
+                .putString("CapeId", orEmpty(serializedSkin.getCapeId()))
+                .putByteArray("CapeData", capeData.getImage())
+                .putInt("CapeImageWidth", capeData.getWidth())
+                .putInt("CapeImageHeight", capeData.getHeight())
+                .putByteArray("SkinResourcePatch", orEmpty(serializedSkin.getSkinResourcePatch()).getBytes(StandardCharsets.UTF_8))
+                .putByteArray("GeometryData", orEmpty(serializedSkin.getGeometryData()).getBytes(StandardCharsets.UTF_8))
+                .putByteArray("SkinAnimationData", orEmpty(serializedSkin.getAnimationData()).getBytes(StandardCharsets.UTF_8))
                 .putBoolean("PremiumSkin", serializedSkin.isPremium())
                 .putBoolean("PersonaSkin", serializedSkin.isPersona())
                 .putBoolean("CapeOnClassicSkin", serializedSkin.isCapeOnClassic())
-                .putString("ArmSize", serializedSkin.getArmSize())
-                .putString("SkinColor", serializedSkin.getSkinColor())
+                .putString("ArmSize", orEmpty(serializedSkin.getArmSize()))
+                .putString("SkinColor", orEmpty(serializedSkin.getSkinColor()))
                 .putBoolean("IsTrustedSkin", skin.isTrusted());
 
             List<AnimationData> animations = serializedSkin.getAnimations();
@@ -297,12 +301,16 @@ public interface IHuman extends InventoryHolder {
                 skinTag.putList("PieceTintColors", tintsTag);
             }
 
-            if (!serializedSkin.getPlayFabId().isEmpty()) {
+            if (serializedSkin.getPlayFabId() != null && !serializedSkin.getPlayFabId().isEmpty()) {
                 skinTag.putString("PlayFabId", serializedSkin.getPlayFabId());
             }
 
             human.getNbt().putCompound("Skin", skinTag);
         }
+    }
+
+    private static String orEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     void setSkin(Skin skin);

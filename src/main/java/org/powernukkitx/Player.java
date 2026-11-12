@@ -4601,7 +4601,13 @@ public class Player extends EntityHuman implements CommandSender, ChunkLoader, I
         this.removeAllWindows(false);
 
         if (ev != null && ev.getAutoSave() && this.nbt != null) {
-            this.save();
+            // A failed save must never abort the teardown below: the player would stay registered
+            // on the server and in its level as a ghost.
+            try {
+                this.save();
+            } catch (Exception e) {
+                log.error("Could not save player {} on close", this.getName(), e);
+            }
         }
         super.close();
 
