@@ -18,6 +18,7 @@ import org.powernukkitx.inventory.Inventory;
 import org.powernukkitx.inventory.InventoryHolder;
 import org.powernukkitx.item.enchantment.Enchantment;
 import org.powernukkitx.level.Level;
+import org.powernukkitx.level.format.IChunk;
 import org.powernukkitx.level.MovingObjectPosition;
 import org.powernukkitx.level.Position;
 import org.powernukkitx.math.AxisAlignedBB;
@@ -1694,7 +1695,9 @@ public abstract class Block extends Position implements Metadatable, AxisAligned
     }
 
     public final boolean isBlockChangeAllowed() {
-        return getChunk().isBlockChangeAllowed(getFloorX() & 0xF, getFloorY(), getFloorZ() & 0xF);
+        // The chunk can be gone by the time a block action is handled (level switch, unload).
+        IChunk chunk = getChunk();
+        return chunk != null && chunk.isBlockChangeAllowed(getFloorX() & 0xF, getFloorY(), getFloorZ() & 0xF);
     }
 
     public final boolean isBlockChangeAllowed(@Nullable Player player) {

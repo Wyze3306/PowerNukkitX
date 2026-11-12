@@ -318,6 +318,10 @@ public class InventoryTransactionHandler implements PacketHandler<InventoryTrans
 
     private void handleUseItem(@NotNull PlayerHandle playerHandle, @NotNull ItemUseInventoryTransaction transaction) {
         Player player = playerHandle.player;
+        // A packet still queued when the player was closed: its inventory is already gone.
+        if (player.getInventory() == null) {
+            return;
+        }
         BlockVector3 blockVector = BlockVector3.fromNetwork(transaction.getPosition());
         BlockFace face = BlockFace.fromIndex(transaction.getFace());
         ItemUseActionType type = transaction.getActionType();

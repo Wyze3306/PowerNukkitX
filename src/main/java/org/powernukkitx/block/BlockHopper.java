@@ -208,7 +208,8 @@ public class BlockHopper extends BlockTransparent implements RedstoneComponent, 
         default boolean pullItems(InventoryHolder hopperHolder, Position hopperPos) {
             var hopperInv = hopperHolder.getInventory();
 
-            if (hopperInv.isFull())
+            // The level can be unloaded while its last tick still runs its block entities.
+            if (hopperPos.level == null || hopperInv.isFull())
                 return false;
 
             Block blockSide = hopperPos.getSide(BlockFace.UP).getTickCachedLevelBlock();

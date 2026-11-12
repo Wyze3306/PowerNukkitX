@@ -5,6 +5,7 @@ import org.powernukkitx.command.CommandSender;
 import org.powernukkitx.command.data.CommandParameter;
 import org.powernukkitx.command.tree.ParamList;
 import org.powernukkitx.command.tree.node.PlayersNode;
+import org.powernukkitx.command.tree.node.RawTextNode;
 import org.powernukkitx.command.utils.CommandLogger;
 import org.powernukkitx.command.utils.RawText;
 import org.powernukkitx.lang.TranslationContainer;
@@ -25,7 +26,7 @@ public class TellrawCommand extends VanillaCommand {
         this.commandParameters.clear();
         this.commandParameters.put("default", new CommandParameter[]{
                 CommandParameter.newType("player", CommandParamType.SELECTION, new PlayersNode()),
-                CommandParameter.newType("rawtext", CommandParamType.RAW_TEXT)
+                CommandParameter.newType("rawtext", CommandParamType.RAW_TEXT, new RawTextNode())
         });
         this.enableParamTree();
     }

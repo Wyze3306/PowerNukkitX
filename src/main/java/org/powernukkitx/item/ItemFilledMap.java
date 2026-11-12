@@ -198,9 +198,14 @@ public class ItemFilledMap extends Item {
     public boolean onClickAir(Player player, Vector3 directionVector) {
         if (getDamage() == 6) return false;
         Server server = player.getServer();
-        renderMap(server.getLevel(getMapWorld()), getMapStartX(), getMapStartZ(), getMapScale());
+        // A map handed out without its tags (command, shop, loot) has no level and a scale of 0.
+        if (getNbt() == null) return false;
+        Level level = server.getLevel(getMapWorld());
+        if (level == null) return false;
+        int scale = Math.max(1, getMapScale());
+        renderMap(level, getMapStartX(), getMapStartZ(), scale);
         player.getInventory().setItemInMainHand(this);
-        sendImage(player, getMapScale());
+        sendImage(player, scale);
         return true;
     }
 }

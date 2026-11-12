@@ -94,13 +94,8 @@ public class BlockEntityJukebox extends BlockEntitySpawnable {
         final Stop stop = new Stop();
         final ClientboundUpdateSoundDataPacket packet = new ClientboundUpdateSoundDataPacket();
         packet.setServerSoundHandle(handle);
-        packet.setStop(stop);
-        packet.setSetVolume(stop);
-        packet.setSetPitch(stop);
-        packet.setFade(stop);
-        packet.setSeekTo(stop);
-        packet.setPause(stop);
-        packet.setResume(stop);
+        // The serializer only writes the event field; left null, the packet could not be encoded.
+        packet.setEvent(stop);
 
         this.broadcast(packet);
     }
